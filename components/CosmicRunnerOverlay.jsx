@@ -14,6 +14,19 @@ const RUNNER_GAME_MUSIC_VOLUME = 0.38;
 const RUNNER_RENDER_PIXEL_RATIO = 1;
 const RUNNER_SCORE_MULTIPLIER = 12;
 const RUNNER_SPARKLE_COUNT = 12;
+// Floating sky clouds. All 12 images are shuffled, then reused without
+// overlaps. These are decorations only, never obstacle hitboxes.
+const SKY_DECORATION_MODE = "png"; // "png" or "crystal"
+const SKY_DECORATION_IMAGE_URLS = Array.from(
+  { length: 12 },
+  (_, index) => `/images/cloud-${String(index).padStart(2, "0")}.png`,
+);
+const SKY_CLOUD_HEIGHT_MIN = 0.57; // World-space height of a small cloud
+const SKY_CLOUD_HEIGHT_MAX = 0.82; // World-space height of a large cloud
+const SKY_CLOUD_SPEED = 0.90;      // Same speed for all clouds: no overtaking
+const SKY_CLOUD_GAP = 0.65;       // Horizontal gap between cloud edges
+const SKY_CLOUD_Z = -2.0;        // Shared depth to maintain exact spacing
+
 const RUNNER_STRIPE_COUNT = 12;
 // All 19 transparent gem images live in /public/images/.
 // Every available gem is equally likely to appear as a runner obstacle.
@@ -483,18 +496,151 @@ for (let i = 0; i < RUNNER_STRIPE_COUNT; i++) {
       restart();
     });
 
+    // SKY DECORATIONS: randomly ordered clouds with no visual collisions.
+    // The position interval of each sprite is disjoint on the X axis.
+    // All clouds move at identical speed, so intervals cannot overtake.
     const sparkles = [];
-    const sparkleMat = new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: colors.pink, emissiveIntensity: 0.62 });
-    for (let i = 0; i < RUNNER_SPARKLE_COUNT; i++) {
-      const sparkle = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), sparkleMat);
-      sparkle.position.set(
-        THREE.MathUtils.randFloat(-5.5, 8),
-        THREE.MathUtils.randFloat(2.1, 5.5),
-        THREE.MathUtils.randFloat(-2.4, 1.3)
+    const skyTextures = [];
+    const skyPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -SKY_CLOUD_Z);
+    const skyRaycaster = new THREE.Raycaster();
+    const skyPoint = new THREE.Vector3();
+    const skyProjected = new THREE.Vector3();
+    const skyRight = new THREE.Vector3();
+    const skyNdcPoint = new THREE.Vector2();
+    let skyDeck = [];
+    let skyDeckCursor = 0;
+
+    function worldXAtScreenEdge(ndcX) {
+      camera.updateMatrixWorld();
+      skyNdcPoint.set(ndcX, 0);
+      skyRaycaster.setFromCamera(skyNdcPoint, camera);
+      if (!skyRaycaster.ray.intersectPlane(skyPlane, skyPoint)) {
+        return ndcX * 8;
+      }
+      return skyPoint.x;
+    }
+
+    function shuffleSkyDeck() {
+      skyDeck = skyTextures.slice();
+      for (let i = skyDeck.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [skyDeck[i], skyDeck[j]] = [skyDeck[j], skyDeck[i]];
+      }
+      skyDeckCursor = 0;
+    }
+
+    function nextSkyImage() {
+      if (!skyDeck.length || skyDeckCursor >= skyDeck.length) {
+        shuffleSkyDeck();
+      }
+      return skyDeck[skyDeckCursor++];
+    }
+
+    function setSkyCloudImage(sprite, entry) {
+      const height = THREE.MathUtils.randFloat(SKY_CLOUD_HEIGHT_MIN, SKY_CLOUD_HEIGHT_MAX);
+      const width = height * entry.aspect;
+      sprite.material.map = entry.texture;
+      sprite.material.needsUpdate = true;
+      sprite.scale.set(width, height, 1);
+      sprite.userData.width = width;
+      sprite.userData.height = height;
+    }
+
+    function respawnSkyCloud(sprite) {
+      setSkyCloudImage(sprite, nextSkyImage());
+      // Spawn outside the RIGHT edge or after the rightmost active cloud.
+      // This conservative rule guarantees none of the cloud rectangles touch,
+      // even if clouds occupy different heights or the viewport was resized.
+      let nextLeft = worldXAtScreenEdge(1) + SKY_CLOUD_GAP;
+      for (const other of sparkles) {
+        if (other === sprite) continue;
+        nextLeft = Math.max(
+          nextLeft,
+          other.position.x + other.userData.width / 2 + SKY_CLOUD_GAP,
+        );
+      }
+      sprite.position.set(
+        nextLeft + sprite.userData.width / 2,
+        THREE.MathUtils.randFloat(2.55, 4.55),
+        SKY_CLOUD_Z,
       );
-      sparkle.userData.speed = THREE.MathUtils.randFloat(0.7, 1.8);
-      scene.add(sparkle);
-      sparkles.push(sparkle);
+    }
+
+    function skyCloudIsPastLeftEdge(sprite) {
+      // PNG sprite is camera-facing, so use its right edge in screen space.
+      skyRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      skyProjected.copy(sprite.position)
+        .addScaledVector(skyRight, sprite.userData.width / 2)
+        .project(camera);
+      return skyProjected.x < -1.07;
+    }
+
+    if (SKY_DECORATION_MODE === "png") {
+      const loader = new THREE.TextureLoader();
+      Promise.allSettled(
+        SKY_DECORATION_IMAGE_URLS.map(async (url) => {
+          const texture = await loader.loadAsync(url);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          const img = texture.image;
+          const width = img?.naturalWidth || img?.width || 1;
+          const height = img?.naturalHeight || img?.height || 1;
+          return { texture, aspect: width / height, url };
+        }),
+      ).then((results) => {
+        const loaded = results
+          .filter((result) => result.status === "fulfilled")
+          .map((result) => result.value);
+        if (dead) {
+          loaded.forEach((entry) => entry.texture.dispose());
+          return;
+        }
+        if (loaded.length !== SKY_DECORATION_IMAGE_URLS.length) {
+          console.warn("Some cloud images could not load:", results);
+        }
+        skyTextures.push(...loaded);
+        if (!skyTextures.length) return;
+
+        // Place clouds in a spaced procession, starting near the left edge.
+        // Subsequent loops reuse every image in a new randomized order.
+        let rightmost = worldXAtScreenEdge(-1) - 0.2;
+        for (let i = 0; i < RUNNER_SPARKLE_COUNT; i += 1) {
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+            transparent: true,
+            color: 0xffffff,
+            depthWrite: false,
+            depthTest: true,
+            toneMapped: false,
+            fog: false,
+          }));
+          setSkyCloudImage(sprite, nextSkyImage());
+          sprite.position.set(
+            rightmost + SKY_CLOUD_GAP + sprite.userData.width / 2,
+            THREE.MathUtils.randFloat(2.55, 4.55),
+            SKY_CLOUD_Z,
+          );
+          rightmost = sprite.position.x + sprite.userData.width / 2;
+          sprite.name = "DecorativeSkyCloud";
+          scene.add(sprite);
+          sparkles.push(sprite);
+        }
+      });
+    } else {
+      const sparkleMat = new THREE.MeshStandardMaterial({
+        color: "#ffffff", emissive: colors.pink, emissiveIntensity: 0.62,
+      });
+      for (let i = 0; i < RUNNER_SPARKLE_COUNT; i += 1) {
+        const sparkle = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), sparkleMat);
+        sparkle.position.set(
+          THREE.MathUtils.randFloat(-5.5, 8),
+          THREE.MathUtils.randFloat(2.1, 5.5),
+          THREE.MathUtils.randFloat(-2.4, 1.3),
+        );
+        sparkle.userData.speed = THREE.MathUtils.randFloat(0.7, 1.8);
+        scene.add(sparkle);
+        sparkles.push(sparkle);
+      }
     }
 
     let velocityY = 0;
@@ -618,11 +764,24 @@ for (let i = 0; i < RUNNER_STRIPE_COUNT; i++) {
       last = now;
 
 
-      for (const sparkle of sparkles) {
-        sparkle.position.x -= sparkle.userData.speed * delta;
-        sparkle.rotation.x += 2 * delta;
-        sparkle.rotation.y += 1.5 * delta;
-        if (sparkle.position.x < -5.8) sparkle.position.x = THREE.MathUtils.randFloat(5.8, 8.8);
+      // Clouds all travel at the same speed, so one can never catch another.
+      if (SKY_DECORATION_MODE === "png") {
+        camera.updateMatrixWorld();
+        for (const cloud of sparkles) {
+          cloud.position.x -= SKY_CLOUD_SPEED * delta;
+          if (skyCloudIsPastLeftEdge(cloud)) {
+            respawnSkyCloud(cloud);
+          }
+        }
+      } else {
+        for (const sparkle of sparkles) {
+          sparkle.position.x -= sparkle.userData.speed * delta;
+          sparkle.rotation.x += 2 * delta;
+          sparkle.rotation.y += 1.5 * delta;
+          if (sparkle.position.x < -5.8) {
+            sparkle.position.x = THREE.MathUtils.randFloat(5.8, 8.8);
+          }
+        }
       }
 
       if (running) {
@@ -749,6 +908,19 @@ if (rightmostScreenX < -1.05) {
         visual.material?.dispose();
       }
       runnerTexture?.dispose();
+      // Dispose decorative assets when leaving the runner.
+      for (const sparkle of sparkles) {
+        scene.remove(sparkle);
+        if (sparkle.isSprite) {
+          sparkle.material?.dispose();
+        } else {
+          sparkle.geometry?.dispose();
+        }
+      }
+      if (SKY_DECORATION_MODE !== "png" && sparkles[0]?.material) {
+        sparkles[0].material.dispose();
+      }
+      skyTextures.forEach(({ texture }) => texture.dispose());
       renderer.dispose();
       renderer.domElement.remove();
     };

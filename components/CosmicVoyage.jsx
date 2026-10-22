@@ -5,8 +5,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import CosmicRunnerOverlay from "./CosmicRunnerOverlay";
+import CorePlanet from './CorePlanet';
+import planetStyles from './CorePlanet.module.css';
 
-import MissionLogoOrb from "./MissionLogoOrb";
 
 // Separate transparent PNG characters for each scene.
 const INTRO_CAT_IMAGE_URL = '/images/alien-cat-image-shopping-bag.png';
@@ -3113,10 +3114,9 @@ side: source.side ?? THREE.FrontSide,
               })}
             </div>
 
-            <div ref={translateGlbStageRef} className="shoppingIntroTranslateGlbStage">
-              <div className="shoppingIntroTranslateGlbLoading">
-                {languageCopy[translateGlbStatusKey] || languageCopy.chooseLanguage}
-              </div>
+            <div className="shoppingIntroTranslateGlbStage">
+              <div className={planetStyles.translatePlanet}><CorePlanet /></div>
+              <div className="shoppingIntroTranslateGlbLoading">{languageCopy.chooseLanguage}</div>
             </div>
           </div>
         </div>
@@ -4968,10 +4968,9 @@ if (state.landed) {
               })}
             </div>
 
-            <div ref={mainTranslateGlbStageRef} className="shoppingIntroTranslateGlbStage">
-              <div className="shoppingIntroTranslateGlbLoading">
-                {copy[mainTranslateGlbStatusKey] || copy.chooseLanguage}
-              </div>
+            <div className="shoppingIntroTranslateGlbStage">
+              <div className={planetStyles.translatePlanet}><CorePlanet /></div>
+              <div className="shoppingIntroTranslateGlbLoading">{copy.chooseLanguage}</div>
             </div>
           </div>
         </div>
@@ -5029,7 +5028,7 @@ if (state.landed) {
           }}
         >
           <div
-            className="missionGalleryWindow"
+            className={`missionGalleryWindow ${planetStyles.viewportWindow}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="missionGalleryTitle"
@@ -5065,35 +5064,10 @@ if (state.landed) {
               <CollectionMiniGlobe />
             </button>
 
-            <div className="missionImageGrid">
-				<MissionLogoOrb />
-              {MISSION_LINK_IMAGES.map((item) => {
-                const collectionTitle =
-                  copy.collectionNames?.[item.titleKey] || item.title;
-                const openCollectionLabel = formatCopy(copy.openCollection, {
-                  title: collectionTitle,
-                });
-
-                return (
-                  <a
-                    key={item.title}
-                    className="missionImageLink"
-                    href={item.url}
-                    data-button-sound={item.sound}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={openCollectionLabel}
-                  >
-                    <img
-                      src={item.image}
-                      alt={collectionTitle}
-                      loading="lazy"
-                    />
-                    <span>{collectionTitle}</span>
-                  </a>
-                );
-              })}
+            <div className={planetStyles.collectionPlanet}>
+              <CorePlanet viewport href="https://shop.almostmadeinjapan.com/collections/" />
             </div>
+            <div className={planetStyles.interactionHint}>Drag to explore · Click to shop</div>
           </div>
         </div>
       )}
