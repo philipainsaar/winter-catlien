@@ -363,16 +363,29 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       groundGroup.add(ground);
     }
 
-    const stripeMat = new THREE.MeshStandardMaterial({ color: colors.pink, roughness: 0.52 });
-    const stripes = [];
-    for (let i = 0; i < RUNNER_STRIPE_COUNT; i++) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.045, 0.12), stripeMat);
-      stripe.position.set(i * 2.2 - 12, 0.025, 2.12);
-      scene.add(stripe);
-      stripes.push(stripe);
-    }
+const stripeMat = new THREE.MeshStandardMaterial({
+  color: colors.pink,
+  roughness: 0.52
+});
+
+const stripes = [];
+for (let i = 0; i < RUNNER_STRIPE_COUNT; i++) {
+  const stripe = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.055, 0.78, 6, 12),
+    stripeMat
+  );
+
+  stripe.rotation.z = Math.PI / 2; // make it horizontal
+  stripe.scale.z = 0.45;           // flatten depth a bit
+  stripe.position.set(i * 2.2 - 12, 0.025, 2.12);
+
+  scene.add(stripe);
+  stripes.push(stripe);
+}
 
     const obstacles = [];
+    const obstacleScreenBounds = new THREE.Box3();
+    const obstacleScreenCorner = new THREE.Vector3();
     const obstacleGroup = new THREE.Group();
     scene.add(obstacleGroup);
 
@@ -654,14 +667,46 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             gemSprite.material.rotation = Math.sin(now * 0.0025 + obstacle.userData.wobblePhase) * 0.09;
           }
           if (hit(obstacle)) endGame();
-          if (obstacle.position.x < -4.4) {
-            disposeObstacle(obstacle);
-            obstacles.splice(i, 1);
-          }
+
+/* Remove gem ONLY after fully leaving the left viewport */
+camera.updateMatrixWorld();
+
+obstacleScreenBounds.setFromObject(obstacle);
+
+let rightmostScreenX = -Infinity;
+
+for (let corner = 0; corner < 8; corner++) {
+  obstacleScreenCorner.set(
+    (corner & 1)
+      ? obstacleScreenBounds.max.x
+      : obstacleScreenBounds.min.x,
+    (corner & 2)
+      ? obstacleScreenBounds.max.y
+      : obstacleScreenBounds.min.y,
+    (corner & 4)
+      ? obstacleScreenBounds.max.z
+      : obstacleScreenBounds.min.z
+  );
+
+  obstacleScreenCorner.project(camera);
+
+  rightmostScreenX = Math.max(
+    rightmostScreenX,
+    obstacleScreenCorner.x
+  );
+}
+
+// -1 = left edge of the visible screen
+// -1.05 = extra 5% offscreen margin
+if (rightmostScreenX < -1.05) {
+  disposeObstacle(obstacle);
+  obstacles.splice(i, 1);
+}
+
         }
       } else if (gemAssetsReady) {
         runner.rotation.z = Math.PI / 2;
-        runner.position.y = 0;
+        runner.position.y = 0.4;
       }
 
       renderer.render(scene, camera);
@@ -805,7 +850,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
           <div ref={overRef} className="cosmicRunnerGlass cosmicRunnerGameOver">
             <h2>Try again!</h2>
-            <p>The alien cat crashed into a crystal.</p>
+            <p>The alien cat crashed into a gem.</p>
             <p className="cosmicRunnerFinalScore">Score: <b>{lastScore}</b></p>
             <form className="cosmicRunnerScoreForm" onSubmit={submitScore}>
               <label htmlFor="cosmicRunnerPlayerName">Name for scoreboard</label>
