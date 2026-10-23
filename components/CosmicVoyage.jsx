@@ -150,7 +150,7 @@ const SITE_TRANSLATIONS = {
     "dragHint": "↑ place the alien cat on the boat ↑",
     "loadingTicker": "Connecting to the CYBER-NETWORK...",
     "loadingTitle": "LOADING...",
-    "collectionsTitle": "WHICH PLANET DO YOU\n\nWANT TO LAND FIRST?",
+    "collectionsTitle": "WELCOME TO OUR U",
     "openCollection": "Open {title}",
     "modelLoadError": "MODEL LOAD ERROR",
     "close": "CLOSE",
@@ -5096,7 +5096,7 @@ if (state.landed) {
           </div>
 
           <div
-            className="ringChatBox"
+            className="ringCloudDialog"
             role="dialog"
             aria-modal="true"
             aria-label="Floating ring message"
@@ -5107,7 +5107,7 @@ if (state.landed) {
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
-    
+    <div className="ringCloudContent">
 
             <pre ref={ringTerminalRef} className="ringTerminalText">
 
@@ -5182,9 +5182,11 @@ if (state.landed) {
     />
   </button>
 </div>
+</div>
             
           </div>
         </div>
+        
       )}
 
           {modelError && (
