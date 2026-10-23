@@ -5113,9 +5113,25 @@ if (state.landed) {
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
-    <div className="ringCloudContent">
 
-            <pre ref={ringTerminalRef} className="ringTerminalText">
+<div className="ringCloudContent">
+
+  {/* Floating Ring close button */}
+  <button
+    type="button"
+    className="shoppingIntroTranslateModalClose ringCloudClose"
+    aria-label={copy.close || "Close popup"}
+    data-button-sound="/sounds/main-translate-close.mp3"
+    onClick={(event) => {
+      event.stopPropagation();
+      closeRingPopup();
+    }}
+  >
+    ×
+  </button>
+
+  <pre ref={ringTerminalRef} className="ringTerminalText">
+
 
               <span className="ringTerminalImageLine">
     <img
