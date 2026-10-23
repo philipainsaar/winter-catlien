@@ -6,32 +6,45 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { applyCorePlanetMaterials } from './corePlanetMaterials';
 import styles from './CorePlanet.module.css';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-let modelBytes;
-function loadModelBytes() {
-  if (!modelBytes) {
-    modelBytes = fetch('/models/CorePlanet2.glb').then((response) => {
-      if (!response.ok) throw new Error(`CorePlanet: HTTP ${response.status}`);
-      return response.arrayBuffer();
-    }).catch((error) => { modelBytes = null; throw error; });
+
+let cachedCorePlanetPromise = null;
+
+export function preloadCorePlanet() {
+  if (!cachedCorePlanetPromise) {
+    cachedCorePlanetPromise = new GLTFLoader()
+      .loadAsync('/models/CorePlanet2.glb')
+      .catch((error) => {
+        cachedCorePlanetPromise = null;
+        throw error;
+      });
   }
-  return modelBytes;
+
+  return cachedCorePlanetPromise;
 }
+
+
 
 function disposeModel(root) {
-  const resources = new Set();
+  const materials = new Set();
+
   root.traverse((object) => {
-    if (object.geometry) resources.add(object.geometry);
-    for (const material of [object.material].flat().filter(Boolean)) {
-      resources.add(material);
-      for (const value of Object.values(material)) if (value?.isTexture) resources.add(value);
-    }
+    const objectMaterials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+
+    objectMaterials.forEach((material) => {
+      if (material) materials.add(material);
+    });
   });
-  for (const resource of resources) {
-    if (resource.isTexture) resource.source?.data?.close?.();
-    resource.dispose();
-  }
+
+  materials.forEach((material) => material.dispose());
+
+  // Geometry and textures belong to the shared cached GLTF.
+  // Do not destroy them when one CorePlanet closes.
 }
+
 
 // This site already uses independent canvases for its modal illustrations.
 // One reusable, transparent canvas replaces both duplicated modal renderers.
@@ -139,23 +152,47 @@ export default function CorePlanet({
     const intersection = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; });
     intersection.observe(element);
 
-    loadModelBytes().then((bytes) => {
-      if (disposed) return null;
-      return new GLTFLoader().parseAsync(bytes.slice(0), '');
-    }).then((gltf) => {
-      if (!gltf) return;
-      if (disposed) { disposeModel(gltf.scene); return; }
-      model = gltf.scene;
-      applyCorePlanetMaterials(model);
-      scene.add(model);
-      mixer = new THREE.AnimationMixer(model);
-      for (const clip of gltf.animations) mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
-      // The 0.4x orbit is baked into the GLB. Do not slow the mixer again.
-      mixer.setTime(0);
-      element.dataset.loaded = 'true';
-    }).catch((error) => {
-      if (!disposed) { console.error('CorePlanet model:', error); setFailed(true); }
+
+preloadCorePlanet()
+  .then((gltf) => {
+    if (disposed) return;
+
+    // Each CorePlanet receives its own scene and materials.
+    // The parsed geometry and textures remain cached.
+    model = cloneSkeleton(gltf.scene);
+
+    model.traverse((object) => {
+      if (!object.isMesh || !object.material) return;
+
+      object.material = Array.isArray(object.material)
+        ? object.material.map((material) =>
+            material ? material.clone() : material
+          )
+        : object.material.clone();
     });
+
+    applyCorePlanetMaterials(model);
+    scene.add(model);
+
+    mixer = new THREE.AnimationMixer(model);
+
+    for (const clip of gltf.animations) {
+      mixer
+        .clipAction(clip)
+        .setLoop(THREE.LoopRepeat, Infinity)
+        .play();
+    }
+
+    // Preserve the original baked orbit speed.
+    mixer.setTime(0);
+  })
+  .catch((error) => {
+    if (!disposed) {
+      console.error('CorePlanet model:', error);
+      setFailed(true);
+    }
+  });
+
 
     renderer.setAnimationLoop((time) => {
       const delta = previousTime === undefined ? 0 : Math.min((time - previousTime) / 1000, 0.1);
@@ -165,6 +202,9 @@ export default function CorePlanet({
       mixer?.setTime(reducedMotion.matches ? 0 : elapsed);
       controls.update();
       renderer.render(scene, camera);
+      if (model && element.dataset.loaded !== 'true') {
+      element.dataset.loaded = 'true';
+      }
     });
     return () => {
       disposed = true;
@@ -186,7 +226,25 @@ export default function CorePlanet({
   const content = <div ref={host} className={styles.canvasHost} data-core-planet
     role={href ? undefined : 'group'} tabIndex={href ? undefined : 0}
     aria-label={href ? undefined : 'Heart planet. Drag or use arrow keys to rotate the view.'}>
-    {failed && <img className={styles.fallback} src="/images/core-planet-preview.png" alt="Pink heart planet" />}
+    
+    
+{!failed && (
+  <img
+    className={styles.preview}
+    src="/images/core-planet-preview.png"
+    alt=""
+    aria-hidden="true"
+    draggable={false}
+  />
+)}
+{failed && (
+  <img
+    className={styles.fallback}
+    src="/images/core-planet-preview.png"
+    alt="Core Planet"
+  />
+)}
+
   </div>;
   if (!href) return content;
   return <a href={href} className={styles.planetLink} draggable={false}

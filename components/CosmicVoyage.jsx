@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import CosmicRunnerOverlay from "./CosmicRunnerOverlay";
-import CorePlanet from './CorePlanet';
+import CorePlanet, { preloadCorePlanet } from './CorePlanet';
 import planetStyles from './CorePlanet.module.css';
 
 
@@ -3854,6 +3854,11 @@ renderer.setPixelRatio(
     let cancelled = false;
 
     THREE.Cache.enabled = true;
+
+// Load and parse CorePlanet before the visitor opens its popup.
+preloadCorePlanet().catch((error) => {
+  console.warn('CorePlanet preload failed:', error);
+});
 
     // Wait for all core PNG images before allowing the intro to proceed.
     const coreAssets = CORE_IMAGE_PRELOAD_URLS.map((url) => ({
