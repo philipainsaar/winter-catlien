@@ -2552,3 +2552,44 @@ html:is(
     border-radius: 8px;
   }
 }
+
+
+/* ==========================================
+   FLOATING RING - CLOSE BUTTON
+   ========================================== */
+
+.ringChatOverlay .ringCloudContent {
+  position: absolute;
+}
+
+/* Same button appearance as Translate popup */
+.ringChatOverlay .ringCloudClose {
+  position: absolute;
+
+  top: 10px;
+  right: 10px;
+
+  z-index: 20;
+
+  display: grid;
+  place-items: center;
+
+  width: 42px;
+  height: 42px;
+  padding: 0;
+
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Smaller on mobile */
+@media (max-width: 520px) {
+  .ringChatOverlay .ringCloudClose {
+    top: 6px;
+    right: 6px;
+
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
+  }
+}
