@@ -12,7 +12,7 @@ const RUNNER_GAME_MUSIC_URL = "/sounds/runner-game-music.mp3";
 const RUNNER_GAME_MUSIC_VOLUME = 0.38;
 
 // Lighter rendering for mobile.
-const RUNNER_RENDER_PIXEL_RATIO = 1;
+const RUNNER_RENDER_PIXEL_RATIO = 1.5;
 const RUNNER_SCORE_MULTIPLIER = 12;
 const RUNNER_SPARKLE_COUNT = 12;
 // Floating sky clouds. All 12 images are shuffled, then reused without
@@ -274,7 +274,7 @@ export default function CosmicRunnerOverlay({
     const camera = new THREE.PerspectiveCamera(58, 1, 0.01, 100);
 
 const renderer = new THREE.WebGLRenderer({
-  antialias: false,
+  antialias: true,
   alpha: true,
   powerPreference: "high-performance",
 });

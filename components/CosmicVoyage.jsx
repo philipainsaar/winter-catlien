@@ -3166,7 +3166,10 @@ function CollectionMiniGlobe() {
 
     const resize = () => {
       const size = Math.max(1, canvas.clientWidth || 110);
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+      const dpr = Math.min(
+       Math.max(window.devicePixelRatio || 1, 1.5),
+      2
+      );
 
       renderer.setPixelRatio(dpr);
       renderer.setSize(size, size, false);
@@ -3862,7 +3865,7 @@ side: source.side ?? THREE.FrontSide,
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: false,
+      antialias: true,
       alpha: true,
       powerPreference: 'high-performance',
       precision: 'mediump',

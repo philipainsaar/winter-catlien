@@ -3064,3 +3064,33 @@ html:is(
     height: 22px;
   }
 }
+
+
+/* ==========================================
+   iPHONE / SAFARI / INSTAGRAM LOGO FIX
+   ========================================== */
+
+/* No square background on logo links */
+.shoppingIntroLogoLink,
+.logoLink {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Clip faint square pixels outside logo circle */
+.shoppingIntroLogo,
+.logoImage {
+  background: transparent !important;
+  border: none !important;
+
+  border-radius: 50%;
+
+  -webkit-clip-path: circle(49% at 50% 50%);
+  clip-path: circle(49% at 50% 50%);
+
+  /* Test without the original drop shadow */
+  filter: none !important;
+}
