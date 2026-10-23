@@ -3524,7 +3524,14 @@ side: source.side ?? THREE.FrontSide,
       powerPreference: 'high-performance',
     });
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+
+renderer.setPixelRatio(
+  Math.min(
+    window.devicePixelRatio || 1,
+    window.innerWidth < 768 ? 1.0 : 1.25
+  )
+);
+
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.42;
@@ -3908,7 +3915,14 @@ side: source.side ?? THREE.FrontSide,
       precision: 'mediump',
     });
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+
+renderer.setPixelRatio(
+  Math.min(
+    window.devicePixelRatio || 1,
+    window.innerWidth < 768 ? 1.0 : 1.25
+  )
+);
+
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
