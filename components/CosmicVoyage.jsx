@@ -4594,6 +4594,8 @@ scene.add(pinkWireframeGlobe);
 
     const reusableWaterColor = new THREE.Color();
 
+    let waterNormalFrame = 0;
+
     const lerp = (from, to, amount) =>
       from + (to - from) * amount;
 
@@ -4701,7 +4703,21 @@ colorAttr.array[i * 3 + 2] = reusableWaterColor.b;
 
       pastelWater.waterPositions.needsUpdate = true;
       colorAttr.needsUpdate = true;
-      pastelWater.water.geometry.computeVertexNormals();
+      
+
+/* Update water normals every second frame on mobile,
+   every frame on desktop */
+
+waterNormalFrame++;
+
+if (
+  window.innerWidth >= 768 ||
+  waterNormalFrame % 2 === 0
+) {
+  pastelWater.water.geometry.computeVertexNormals();
+}
+
+
       pastelWater.water.rotation.z = Math.sin(elapsed * 0.8) * 0.006;
 
       if (state.launching) {

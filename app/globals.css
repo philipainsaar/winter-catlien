@@ -3094,3 +3094,11 @@ html:is(
   /* Test without the original drop shadow */
   filter: none !important;
 }
+
+
+/* TEMPORARY MOBILE PERFORMANCE TEST */
+@media (max-width: 767px) {
+  .movingSymbolLayer {
+    display: none !important;
+  }
+}
