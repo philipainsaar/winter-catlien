@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 const SITE_SOUND_EVENT_NAME = "galaxy-cat:play-sound";
 const SITE_MUSIC_EVENT_NAME = "galaxy-cat:music";
@@ -366,15 +367,90 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       );
     }
 
-    const groundGroup = new THREE.Group();
-    scene.add(groundGroup);
-    const groundMat = new THREE.MeshStandardMaterial({ color: colors.blue, roughness: 0.64 });
-    for (let i = 0; i < 3; i++) {
-      const ground = new THREE.Mesh(new THREE.BoxGeometry(22, 0.22, 5.4), groundMat);
-      ground.position.set(i * 22 - 22, -0.13, 0);
-      ground.receiveShadow = true;
-      groundGroup.add(ground);
-    }
+/* ==========================================
+   SINGLE SMOOTH BLUE ROAD - NO SEAMS
+   ========================================== */
+
+const ROAD_LENGTH = 80;     // long enough to cover the whole view
+const ROAD_WIDTH = 5.4;
+const ROAD_CORE_WIDTH = 4.8;
+const ROAD_Y = -0.13;
+const ROAD_THICKNESS = 0.22;
+const ROAD_ROUNDNESS = 0.10;
+
+function createRoadEdgeTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0.00, "rgba(174,219,255,0)");
+  gradient.addColorStop(0.08, "rgba(174,219,255,0.20)");
+  gradient.addColorStop(0.18, "rgba(174,219,255,0.85)");
+  gradient.addColorStop(0.28, "rgba(174,219,255,1)");
+  gradient.addColorStop(0.72, "rgba(174,219,255,1)");
+  gradient.addColorStop(0.82, "rgba(174,219,255,0.85)");
+  gradient.addColorStop(0.92, "rgba(174,219,255,0.20)");
+  gradient.addColorStop(1.00, "rgba(174,219,255,0)");
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const groundCoreMaterial = new THREE.MeshStandardMaterial({
+  color: colors.blue,
+  roughness: 0.64,
+  metalness: 0.02,
+  depthWrite: false
+});
+
+const groundCoreGeometry = new RoundedBoxGeometry(
+  ROAD_LENGTH,
+  ROAD_THICKNESS,
+  ROAD_CORE_WIDTH,
+  3,
+  ROAD_ROUNDNESS
+);
+
+const groundEdgeTexture = createRoadEdgeTexture();
+
+const groundEdgeMaterial = new THREE.MeshBasicMaterial({
+  map: groundEdgeTexture,
+  color: 0xffffff,
+  transparent: true,
+  opacity: 1,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  toneMapped: false
+});
+
+const groundEdgeGeometry = new THREE.PlaneGeometry(
+  ROAD_LENGTH,
+  ROAD_WIDTH
+);
+
+const groundGroup = new THREE.Group();
+scene.add(groundGroup);
+
+const roadCore = new THREE.Mesh(groundCoreGeometry, groundCoreMaterial);
+roadCore.position.set(0, ROAD_Y, 0);
+roadCore.receiveShadow = true;
+groundGroup.add(roadCore);
+
+const roadEdges = new THREE.Mesh(groundEdgeGeometry, groundEdgeMaterial);
+roadEdges.rotation.x = -Math.PI / 2;
+roadEdges.position.set(0, ROAD_Y + ROAD_THICKNESS / 2 + 0.005, 0);
+roadEdges.renderOrder = -10;
+groundGroup.add(roadEdges);
+
 
 const stripeMat = new THREE.MeshStandardMaterial({
   color: colors.pink,
@@ -802,10 +878,6 @@ for (let i = 0; i < RUNNER_STRIPE_COUNT; i++) {
         runner.scale.set(1 + bounce, 1 - bounce * 0.7, 1 + bounce);
         runner.rotation.z = grounded ? Math.sin(now * 0.014) * 0.035 : -0.18;
 
-        for (const ground of groundGroup.children) {
-          ground.position.x -= speed * delta;
-          if (ground.position.x < -22) ground.position.x += 66;
-        }
         for (const stripe of stripes) {
           stripe.position.x -= speed * delta;
           if (stripe.position.x < -12) stripe.position.x += 39.6;
@@ -921,6 +993,8 @@ if (rightmostScreenX < -1.05) {
         sparkles[0].material.dispose();
       }
       skyTextures.forEach(({ texture }) => texture.dispose());
+      groundCoreGeometry.dispose();
+
       renderer.dispose();
       renderer.domElement.remove();
     };
