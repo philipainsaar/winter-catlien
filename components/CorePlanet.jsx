@@ -35,7 +35,11 @@ function disposeModel(root) {
 
 // This site already uses independent canvases for its modal illustrations.
 // One reusable, transparent canvas replaces both duplicated modal renderers.
-export default function CorePlanet({ viewport = false, href }) {
+export default function CorePlanet({
+  viewport = false,
+  href,
+  onBackgroundClick,
+}) {
   const host = useRef(null);
   const dragged = useRef(false);
   const [failed, setFailed] = useState(false);
@@ -194,7 +198,44 @@ export default function CorePlanet({ viewport = false, href }) {
         host.current?.dispatchEvent(new KeyboardEvent('keydown', { key: event.key }));
       }
     }}
-    onClickCapture={(event) => {
-      if (event.detail !== 0 && dragged.current) { event.preventDefault(); event.stopPropagation(); }
-    }}>{content}</a>;
+
+onClickCapture={(event) => {
+  // Never open the shop while rotating the planet.
+  if (event.detail !== 0 && dragged.current) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  // Preserve keyboard activation with Enter.
+  if (event.detail === 0) return;
+
+  // Only apply this behavior in the full-screen planet view.
+  if (!viewport) return;
+
+  const rect = event.currentTarget.getBoundingClientRect();
+
+  // The planet is centered in the viewport.
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  // Clickable circular area around the planet.
+  const radius = Math.min(rect.width, rect.height) * 0.30;
+
+  const dx = event.clientX - centerX;
+  const dy = event.clientY - centerY;
+
+  const clickedPlanet =
+    dx * dx + dy * dy <= radius * radius;
+
+  if (!clickedPlanet) {
+    // Do not follow the shop link.
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Close the popup and return to the water scene.
+    onBackgroundClick?.();
+  }
+}}
+>{content}</a>;
 }

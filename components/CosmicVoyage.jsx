@@ -150,7 +150,7 @@ const SITE_TRANSLATIONS = {
     "dragHint": "↑ place the alien cat on the boat ↑",
     "loadingTicker": "Connecting to the CYBER-NETWORK...",
     "loadingTitle": "LOADING...",
-    "collectionsTitle": "WELCOME TO OUR U",
+    "collectionsTitle": "WELCOME TO OUR UNIVERSE",
     "openCollection": "Open {title}",
     "modelLoadError": "MODEL LOAD ERROR",
     "close": "CLOSE",
@@ -5065,9 +5065,15 @@ if (state.landed) {
             </button>
 
             <div className={planetStyles.collectionPlanet}>
-              <CorePlanet viewport href="https://shop.almostmadeinjapan.com/collections/" />
+              
+<CorePlanet
+  viewport
+  href="https://shop.almostmadeinjapan.com/collections/"
+  onBackgroundClick={resetExperience}
+/>
+
             </div>
-            <div className={planetStyles.interactionHint}>Drag to explore · Click to shop</div>
+            <div className={planetStyles.interactionHint}>· Click to shop ·</div>
           </div>
         </div>
       )}
