@@ -1256,7 +1256,7 @@ function createUltraFastWater() {
   // Smooth, high pastel waves for mobile:
   // one water mesh, no flat overlay planes, no GLB, no texture slicing.
   // Colors live directly on the wave vertices so pink/lavender/cyan stay visible.
-  const segments = window.innerWidth < 768 ? 44 : 64;
+  const segments = window.innerWidth < 768 ? 32 : 48;
   const geometry = new THREE.PlaneGeometry(
     120,
     120,
@@ -1265,6 +1265,7 @@ function createUltraFastWater() {
   );
 
   const waterPositions = geometry.attributes.position;
+  waterPositions.setUsage(THREE.DynamicDrawUsage);
   const basePositions = waterPositions.array.slice();
 
   const waterColors = new Float32Array(waterPositions.count * 3);
@@ -1298,6 +1299,9 @@ function createUltraFastWater() {
     new THREE.BufferAttribute(waterColors, 3),
   );
   geometry.computeVertexNormals();
+
+  geometry.attributes.color.setUsage(THREE.DynamicDrawUsage);
+geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
 
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -3247,6 +3251,39 @@ function usePopupPresence(open, exitDuration = 360) {
 export default function CosmicVoyage() {
   useButtonPressSound();
 
+
+
+
+  const popupFrameImagesRef = useRef([]);
+
+  useEffect(() => {
+    const frameUrls = [
+      "/images/ring-cloud-frame-wide.png",
+      "/images/ring-cloud-frame.png",
+    ];
+
+    popupFrameImagesRef.current = frameUrls.map((url) => {
+      const image = new Image();
+
+      image.decoding = "async";
+      image.src = url;
+
+      if (typeof image.decode === "function") {
+        image.decode().catch(() => {
+          console.warn("Cloud frame could not decode:", url);
+        });
+      }
+
+      return image;
+    });
+
+    return () => {
+      popupFrameImagesRef.current = [];
+    };
+  }, []);
+
+
+
   const canvasRef = useRef(null);
   const stateRef = useRef(null);
   const preloadStoreRef = useRef(null);
@@ -4541,6 +4578,8 @@ scene.add(pinkWireframeGlobe);
     const billboardParentQuaternion = new THREE.Quaternion();
     let elapsed = 0;
 
+    const reusableWaterColor = new THREE.Color();
+
     const lerp = (from, to, amount) =>
       from + (to - from) * amount;
 
@@ -4628,18 +4667,22 @@ pinkWireframeGlobe.rotation.z =
         const ribbonC =
           (Math.sin((x + y) * 0.06 + waterTime * 1.15) + 1) * 0.5;
 
-        const c = new THREE.Color();
+        
 
-        c.copy(pastelWater.deepCyan)
-          .lerp(pastelWater.cyan, crest * 0.65)
-          .lerp(pastelWater.pink, ribbonA * 0.42)
-          .lerp(pastelWater.lavender, ribbonB * 0.34)
-          .lerp(pastelWater.softPink, ribbonC * 0.20)
-          .lerp(pastelWater.whiteFoam, Math.max(0, crest - 0.72) * 0.75);
+reusableWaterColor
+  .copy(pastelWater.deepCyan)
+  .lerp(pastelWater.cyan, crest * 0.65)
+  .lerp(pastelWater.pink, ribbonA * 0.42)
+  .lerp(pastelWater.lavender, ribbonB * 0.34)
+  .lerp(pastelWater.softPink, ribbonC * 0.20)
+  .lerp(
+    pastelWater.whiteFoam,
+    Math.max(0, crest - 0.72) * 0.75
+  );
 
-        colorAttr.array[i * 3] = c.r;
-        colorAttr.array[i * 3 + 1] = c.g;
-        colorAttr.array[i * 3 + 2] = c.b;
+colorAttr.array[i * 3] = reusableWaterColor.r;
+colorAttr.array[i * 3 + 1] = reusableWaterColor.g;
+colorAttr.array[i * 3 + 2] = reusableWaterColor.b;
       }
 
       pastelWater.waterPositions.needsUpdate = true;
