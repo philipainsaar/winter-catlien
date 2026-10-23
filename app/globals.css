@@ -3097,37 +3097,45 @@ html:is(
 
 
 /* ==========================================
-   MOBILE SKY PERFORMANCE OPTIMIZATION
-   Target: Smooth 60 FPS
-   Keep colors, symbols and floating motion
+   SKY PERFORMANCE MODE
+   Keep:
+   - pink / blue / white glows
+   - five-layer sparkle overlay
+   Remove:
+   - rapid individual flashes
+   - extra moving shine overlay
+   Applies to both mobile and desktop
    ========================================== */
 
-@media (max-width: 767px) {
+/* Keep the original five-layer sparkle overlay */
+.movingSymbolLayer::before {
+  display: block !important;
+}
 
-  /* Disable the two expensive sparkle overlays */
-  .movingSymbolLayer::before,
-  .movingSymbolLayer::after {
-    display: none !important;
-  }
+/* Disable the second overlay / moving shine */
+.movingSymbolLayer::after {
+  display: none !important;
+  animation: none !important;
+}
 
-  /* Preserve colorful PNGs, remove costly glow filters */
-  .movingBgSymbol,
-  .movingBgSymbol:nth-child(3n + 1),
-  .movingBgSymbol:nth-child(3n + 2),
-  .movingBgSymbol:nth-child(5n) {
-    filter: none !important;
+/* Keep floating movement and glow, remove rapid flashing */
+.movingBgSymbol,
+.movingBgSymbol:nth-child(3n + 1),
+.movingBgSymbol:nth-child(3n + 2),
+.movingBgSymbol:nth-child(5n) {
+  /* keep the original glow look */
+  filter: inherit;
 
-    /* Allow browser to manage compositing */
-    will-change: auto !important;
+  /* only float, no flashing */
+  animation-name: movingSymbolFloat !important;
+  animation-duration: var(--symbol-float-duration, 24s) !important;
+  animation-timing-function: ease-in-out !important;
+  animation-iteration-count: infinite !important;
+  animation-delay: 0s !important;
+}
 
-    /* Keep gentle floating, disable rapid flashing */
-    animation-name: movingSymbolFloat !important;
-    animation-duration: var(
-      --symbol-float-duration,
-      24s
-    ) !important;
-    animation-timing-function: ease-in-out !important;
-    animation-iteration-count: infinite !important;
-  }
-
+/* Prevent extra animation stacking on pseudo sparkle elements */
+.movingSymbolLayer::before,
+.movingBgSymbol {
+  will-change: auto !important;
 }
