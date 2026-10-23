@@ -613,7 +613,12 @@ function randomItem(items) {
 
 function createMovingBackgroundSymbols() {
   const columns = MOVING_SYMBOL_COLUMNS;
-  const rows = MOVING_SYMBOL_ROWS;
+
+  // Fewer animated decorations on mobile
+  const rows =
+    window.innerWidth < 768
+      ? 3
+      : MOVING_SYMBOL_ROWS;
 
   const cellWidth = 100 / columns;
   const cellHeight = 100 / rows;

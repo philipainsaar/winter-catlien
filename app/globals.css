@@ -3094,3 +3094,40 @@ html:is(
   /* Test without the original drop shadow */
   filter: none !important;
 }
+
+
+/* ==========================================
+   MOBILE SKY PERFORMANCE OPTIMIZATION
+   Target: Smooth 60 FPS
+   Keep colors, symbols and floating motion
+   ========================================== */
+
+@media (max-width: 767px) {
+
+  /* Disable the two expensive sparkle overlays */
+  .movingSymbolLayer::before,
+  .movingSymbolLayer::after {
+    display: none !important;
+  }
+
+  /* Preserve colorful PNGs, remove costly glow filters */
+  .movingBgSymbol,
+  .movingBgSymbol:nth-child(3n + 1),
+  .movingBgSymbol:nth-child(3n + 2),
+  .movingBgSymbol:nth-child(5n) {
+    filter: none !important;
+
+    /* Allow browser to manage compositing */
+    will-change: auto !important;
+
+    /* Keep gentle floating, disable rapid flashing */
+    animation-name: movingSymbolFloat !important;
+    animation-duration: var(
+      --symbol-float-duration,
+      24s
+    ) !important;
+    animation-timing-function: ease-in-out !important;
+    animation-iteration-count: infinite !important;
+  }
+
+}
