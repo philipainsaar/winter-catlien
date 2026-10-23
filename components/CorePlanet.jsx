@@ -227,23 +227,6 @@ preloadCorePlanet()
     role={href ? undefined : 'group'} tabIndex={href ? undefined : 0}
     aria-label={href ? undefined : 'Heart planet. Drag or use arrow keys to rotate the view.'}>
     
-    
-{!failed && (
-  <img
-    className={styles.preview}
-    src="/images/core-planet-preview.png"
-    alt=""
-    aria-hidden="true"
-    draggable={false}
-  />
-)}
-{failed && (
-  <img
-    className={styles.fallback}
-    src="/images/core-planet-preview.png"
-    alt="Core Planet"
-  />
-)}
 
   </div>;
   if (!href) return content;
