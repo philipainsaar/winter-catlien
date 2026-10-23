@@ -3208,6 +3208,39 @@ function CollectionMiniGlobe() {
 }
 
 
+/* Keep a popup mounted until its closing animation finishes */
+function usePopupPresence(open, exitDuration = 360) {
+  const [rendered, setRendered] = useState(open);
+  const [exiting, setExiting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRendered(true);
+      setExiting(false);
+      return;
+    }
+
+    if (!rendered) return;
+
+    setExiting(true);
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    const timer = window.setTimeout(() => {
+      setRendered(false);
+      setExiting(false);
+    }, reduceMotion ? 0 : exitDuration);
+
+    return () => window.clearTimeout(timer);
+  }, [open, rendered, exitDuration]);
+
+  return { rendered, exiting };
+}
+
+
+
 export default function CosmicVoyage() {
   useButtonPressSound();
 
@@ -3225,6 +3258,17 @@ export default function CosmicVoyage() {
   const [runnerGameOpen, setRunnerGameOpen] = useState(false);
   const runnerGameOpenRef = useRef(false);
   const [ringPopupOpen, setRingPopupOpen] = useState(false);
+
+const {
+  rendered: loadingVisible,
+  exiting: loadingExiting,
+} = usePopupPresence(loading, 360);
+
+const {
+  rendered: ringVisible,
+  exiting: ringExiting,
+} = usePopupPresence(ringPopupOpen, 360);
+
   const [ringPopupPlacement, setRingPopupPlacement] = useState({
     left: 72,
     top: 180,
@@ -3688,7 +3732,7 @@ side: source.side ?? THREE.FrontSide,
   }, []);
 
   useEffect(() => {
-    if (!ringPopupOpen) {
+      if (!ringVisible) {
       setRingTerminalText('');
       return undefined;
     }
@@ -3705,7 +3749,7 @@ side: source.side ?? THREE.FrontSide,
     }, 24);
 
     return () => window.clearInterval(timer);
-  }, [ringPopupOpen, copy.ringTerminalMessage]);
+  }, [ringVisible, copy.ringTerminalMessage]);
 
   useEffect(() => {
     if (!ringTerminalRef.current) return;
@@ -4979,7 +5023,10 @@ if (state.landed) {
 
 {loading && (
 
-  <div className="loadingOverlay">
+    <div
+    className="loadingOverlay"
+    data-popup-state={loadingExiting ? "closing" : "open"}
+    >
     <div className="loadingNetworkTicker" aria-hidden="true">
       <span>{copy.loadingTicker}</span>
     </div>
@@ -5082,6 +5129,7 @@ if (state.landed) {
       {ringPopupOpen && (
         <div
           className="ringChatOverlay"
+          data-popup-state={ringExiting ? "closing" : "open"}
           role="presentation"
           onPointerDown={closeRingPopup}
         >

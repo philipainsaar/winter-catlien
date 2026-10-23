@@ -2593,3 +2593,474 @@ html:is(
     font-size: 20px;
   }
 }
+
+
+/* ============================================
+   ALMOST JAPAN - WIDE CLOUD LOADING POPUP
+   Desktop / Tablet / Mobile / All Languages
+   ============================================ */
+
+.loadingOverlay .loadingPopup {
+  /* WINDOW DIMENSIONS */
+  position: relative;
+
+  width: min(82vw, 760px);
+  height: auto;
+  min-height: 245px;
+
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+
+  box-sizing: border-box;
+  padding: 30px 54px;
+
+  /* CONTENT LAYOUT */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 14px;
+
+  flex: 0 0 auto;
+
+  /* FROSTED GLASS WINDOW */
+  background: rgba(255, 250, 255, 0.72);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+
+  box-shadow:
+    0 12px 40px rgba(157, 120, 205, 0.14),
+    inset 0 0 22px rgba(255, 255, 255, 0.25);
+
+  /* Allow clouds outside the popup */
+  overflow: visible;
+  isolation: isolate;
+}
+
+/* ============================================
+   CLOUD FRAME OUTSIDE THE WINDOW
+   ============================================ */
+
+.loadingOverlay .loadingPopup::before {
+  content: "";
+  display: block;
+
+  position: absolute;
+
+  /* Clouds extend beyond frosted window */
+  inset: -40px -70px;
+
+  z-index: -1;
+  pointer-events: none;
+
+  background-image:
+    url("/images/ring-cloud-frame-wide.png");
+
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+
+  /* Remove old border effects */
+  border: none;
+  border-image: none;
+  border-radius: 0;
+}
+
+/* Remove old animated shine pseudo-element */
+.loadingOverlay .loadingPopup::after {
+  content: none;
+  display: none;
+}
+
+/* Keep all real content above the decoration */
+.loadingOverlay .loadingPopup > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Hide old decorative title bar */
+.loadingOverlay .loadingWindowBar {
+  display: none;
+}
+
+/* ============================================
+   LOADING TITLE - SINGLE LINE
+   ============================================ */
+
+.loadingOverlay .loadingTitle {
+  display: block;
+
+  width: 100%;
+  min-width: 0;
+
+  margin: 0;
+  padding: 0;
+
+  font-family: var(--font-display);
+  font-size: clamp(17px, 3.8vw, 46px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+
+  text-align: center;
+
+  /* Prevent vertical stacking / wrapping */
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+
+  flex: 0 0 auto;
+}
+
+/* ============================================
+   PROGRESS BAR
+   ============================================ */
+
+.loadingOverlay .loadingBarOuter {
+  position: relative;
+
+  width: 100%;
+  height: 30px;
+
+  margin: 0;
+  padding: 0;
+
+  box-sizing: border-box;
+
+  border: 2px solid #ae91dc;
+  border-radius: 999px;
+
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.76);
+
+  flex: 0 0 auto;
+}
+
+.loadingOverlay .loadingBarInner {
+  height: 100%;
+
+  border-radius: 999px;
+
+  background: linear-gradient(
+    90deg,
+    #ffb7dc,
+    #cbb7ff,
+    #aedbff
+  );
+
+  transition: width 0.08s linear;
+}
+
+/* ============================================
+   LOADING PERCENTAGE
+   ============================================ */
+
+.loadingOverlay .loadingPercent {
+  position: relative;
+
+  width: 100%;
+
+  margin: 0;
+  padding: 0;
+
+  font-size: clamp(22px, 3vw, 32px);
+  line-height: 1.2;
+
+  text-align: center;
+  white-space: nowrap;
+
+  flex: 0 0 auto;
+}
+
+/* ============================================
+   TABLET
+   ============================================ */
+
+@media (max-width: 768px) {
+  .loadingOverlay .loadingPopup {
+    width: min(80vw, 600px);
+
+    min-height: 210px;
+    padding: 24px 30px;
+    gap: 12px;
+  }
+
+  .loadingOverlay .loadingPopup::before {
+    inset: -30px -42px;
+  }
+
+  .loadingOverlay .loadingTitle {
+    font-size: clamp(17px, 4vw, 34px);
+  }
+}
+
+/* ============================================
+   MOBILE
+   ============================================ */
+
+@media (max-width: 520px) {
+  .loadingOverlay .loadingPopup {
+    width: 76vw;
+
+    min-height: 160px;
+    padding: 18px 14px;
+    gap: 10px;
+
+    border-radius: 15px;
+  }
+
+  .loadingOverlay .loadingPopup::before {
+    inset: -22px -38px;
+  }
+
+  .loadingOverlay .loadingTitle {
+    font-size: clamp(16px, 4vw, 22px);
+    letter-spacing: 0;
+    line-height: 1.1;
+  }
+
+  .loadingOverlay .loadingBarOuter {
+    height: 21px;
+  }
+
+  .loadingOverlay .loadingPercent {
+    font-size: 22px;
+  }
+}
+
+
+/* ==========================================
+   CUTE CLOUD POPUP ANIMATIONS
+   ========================================== */
+
+/* LOADING WINDOW - BOUNCY ENTRANCE */
+.loadingOverlay .loadingPopup {
+  transform-origin: center center;
+
+  animation:
+    cloudLoadingEnter 520ms
+    cubic-bezier(0.2, 0.8, 0.2, 1)
+    both;
+}
+
+@keyframes cloudLoadingEnter {
+  0% {
+    opacity: 0;
+    transform:
+      translateY(26px)
+      scale(0.85)
+      rotate(-1deg);
+    filter: blur(5px);
+  }
+
+  62% {
+    opacity: 1;
+    transform:
+      translateY(-8px)
+      scale(1.035)
+      rotate(0.4deg);
+    filter: blur(0);
+  }
+
+  82% {
+    transform:
+      translateY(2px)
+      scale(0.99);
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      translateY(0)
+      scale(1)
+      rotate(0);
+    filter: blur(0);
+  }
+}
+
+/* LOADING WINDOW - SOFT EXIT */
+.loadingOverlay[data-popup-state="closing"] .loadingPopup {
+  animation:
+    cloudLoadingExit 320ms ease-in both;
+}
+
+@keyframes cloudLoadingExit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.88);
+    filter: blur(4px);
+  }
+}
+
+/* ==========================================
+   FLOATING RING - CUTE CLOUD BOUNCE
+   Preserve original center positioning
+   ========================================== */
+
+.ringChatOverlay .ringCloudDialog {
+  transform-origin: center center;
+
+  animation:
+    ringCloudEnter 540ms
+    cubic-bezier(0.2, 0.8, 0.2, 1)
+    both;
+}
+
+@keyframes ringCloudEnter {
+  0% {
+    opacity: 0;
+    transform:
+      translate(-50%, -47%)
+      scale(0.82)
+      rotate(-1.2deg);
+    filter: blur(5px);
+  }
+
+  64% {
+    opacity: 1;
+    transform:
+      translate(-50%, -51%)
+      scale(1.04)
+      rotate(0.4deg);
+    filter: blur(0);
+  }
+
+  84% {
+    transform:
+      translate(-50%, -50%)
+      scale(0.99);
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      scale(1)
+      rotate(0);
+    filter: blur(0);
+  }
+}
+
+/* FLOATING RING - SOFT EXIT */
+.ringChatOverlay[data-popup-state="closing"]
+.ringCloudDialog {
+  animation:
+    ringCloudExit 320ms ease-in both;
+}
+
+@keyframes ringCloudExit {
+  from {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform:
+      translate(-50%, -47%)
+      scale(0.86);
+    filter: blur(4px);
+  }
+}
+
+/* ==========================================
+   BACKGROUND FADE
+   ========================================== */
+
+.loadingOverlay {
+  animation: cloudOverlayEnter 300ms ease-out both;
+}
+
+.ringChatOverlay {
+  animation: cloudOverlayEnter 300ms ease-out both;
+}
+
+.loadingOverlay[data-popup-state="closing"],
+.ringChatOverlay[data-popup-state="closing"] {
+  animation: cloudOverlayExit 320ms ease-in both;
+}
+
+@keyframes cloudOverlayEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cloudOverlayExit {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .loadingOverlay,
+  .loadingOverlay .loadingPopup,
+  .ringChatOverlay,
+  .ringChatOverlay .ringCloudDialog {
+    animation: none !important;
+  }
+}
+
+
+/* ==========================================
+   LOADING POPUP - CENTERED PROGRESS BAR
+   Desktop + Tablet + Mobile
+   ========================================== */
+
+/* Outer progress bar */
+.loadingOverlay .loadingPopup .loadingBarOuter {
+  width: 78% !important;
+  max-width: 620px !important;
+
+  margin-left: auto !important;
+  margin-right: auto !important;
+
+  height: 30px;
+  box-sizing: border-box;
+
+  border: 2px solid #ae91dc;
+  border-radius: 999px;
+
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.75);
+
+  flex: 0 0 auto;
+}
+
+/* Progress fill stays proportional to loading % */
+.loadingOverlay .loadingPopup .loadingBarInner {
+  height: 100%;
+  max-width: 100%;
+
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #ffb7dc,
+    #cbb7ff,
+    #aedbff
+  );
+
+  transition: width 0.08s linear;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .loadingOverlay .loadingPopup .loadingBarOuter {
+    width: 76% !important;
+    height: 22px;
+  }
+}
