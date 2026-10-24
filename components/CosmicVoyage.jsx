@@ -5190,7 +5190,7 @@ if (state.landed) {
               
 <CorePlanet
   viewport
-  href="https://shop.almostmadeinjapan.com/collections/"
+  href="https://shop.almostmadeinjapan.com/"
   onBackgroundClick={resetExperience}
 />
 
