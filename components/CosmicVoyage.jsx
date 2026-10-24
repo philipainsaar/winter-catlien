@@ -59,26 +59,15 @@ const TRANSLATE_LANGUAGE_OPTIONS = [
 const CORE_BUTTON_SOUND_FILES = [
   'SOUND.mp3',
   'intro-logo.mp3',
-  'intro-translate-open.mp3',
   'intro-translate-close.mp3',
   'intro-enter.mp3',
   'main-logo.mp3',
-  'main-translate-open.mp3',
-  'main-translate-close.mp3',
   'mission-close.mp3',
   'start-alien-cat-game.mp3',
   'collection-dreamy.mp3',
   'collection-emo.mp3',
   'collection-nature.mp3',
   'collection-cyber.mp3',
-  'social-tiktok.mp3',
-  'social-instagram.mp3',
-  'social-email.mp3',
-  'social-share.mp3',
-  'model-error-close.mp3',
-  'runner-close.mp3',
-  'runner-play-again.mp3',
-  'runner-save-score.mp3',
   FLOATING_RING_PRESS_SOUND_FILE,
   CAT_TO_BOAT_LOADING_SOUND_FILE,
   RUNNER_JUMP_SOUND_FILE,
@@ -3022,7 +3011,7 @@ side: source.side ?? THREE.FrontSide,
   type="button"
   className="shoppingIntroTranslateButton"
   aria-label={languageCopy.translate}
-  data-button-sound="/sounds/intro-translate-open.mp3"
+  data-button-sound=""
   aria-expanded={showTranslateModal}
   onClick={() => setShowTranslateModal(true)}
 >
@@ -5000,7 +4989,7 @@ if (state.landed) {
           type="button"
           className="shoppingIntroTranslateButton mainExperienceTranslateButton"
           aria-label={copy.translate}
-          data-button-sound="/sounds/main-translate-open.mp3"
+          data-button-sound=""
           aria-expanded={showMainTranslateModal}
           onClick={() => setShowMainTranslateModal(true)}
           style={{
@@ -5051,7 +5040,7 @@ if (state.landed) {
                 type="button"
                 className="shoppingIntroTranslateModalClose"
                 aria-label={copy.closeTranslatePopup}
-                data-button-sound="/sounds/main-translate-close.mp3"
+                data-button-sound=""
                 onClick={() => setShowMainTranslateModal(false)}
               >
                 ×
@@ -5255,7 +5244,7 @@ if (state.landed) {
     type="button"
     className="shoppingIntroTranslateModalClose ringCloudClose"
     aria-label={copy.close || "Close popup"}
-    data-button-sound="/sounds/main-translate-close.mp3"
+    data-button-sound=""
     onClick={(event) => {
       event.stopPropagation();
       closeRingPopup();
@@ -5284,7 +5273,7 @@ if (state.landed) {
   <a
     className="ringSocialButton ringSocialButtonTikTok"
     href="https://www.tiktok.com/@almostmadeinjapan"
-    data-button-sound="/sounds/social-tiktok.mp3"
+    data-button-sound=""
     target="_blank"
     rel="noreferrer"
     aria-label="TikTok"
@@ -5299,7 +5288,7 @@ if (state.landed) {
   <a
     className="ringSocialButton ringSocialButtonInstagram"
     href="https://www.instagram.com/almostmadeinjapan/"
-    data-button-sound="/sounds/social-instagram.mp3"
+    data-button-sound=""
     target="_blank"
     rel="noreferrer"
     aria-label="Instagram"
@@ -5314,7 +5303,7 @@ if (state.landed) {
   <a
     className="ringSocialButton ringSocialButtonEmail"
     href="mailto:hello@almostmadeinjapan.com?subject=Almost Made in Japan&body=https://www.almostmadeinjapan.com/"
-    data-button-sound="/sounds/social-email.mp3"
+    data-button-sound=""
     aria-label="Email"
   >
     <img
@@ -5328,7 +5317,7 @@ if (state.landed) {
     type="button"
     className="ringSocialButton ringSocialButtonShare"
     aria-label="Share"
-    data-button-sound="/sounds/social-share.mp3"
+    data-button-sound=""
     onClick={shareWebsite}
   >
     <img
@@ -5351,7 +5340,7 @@ if (state.landed) {
             <span>{copy.modelLoadError}</span>
             <button
               type="button"
-              data-button-sound="/sounds/model-error-close.mp3"
+              data-button-sound=""
               onClick={() => setModelError('')}
             >
               {copy.close}

@@ -1016,7 +1016,7 @@ if (rightmostScreenX < -1.05) {
             <button
               type="button"
               className="cosmicRunnerTrophyButton"
-              data-button-sound="/sounds/runner-scoreboard.mp3"
+              data-button-sound="/sounds/intro-enter.mp3"
               aria-label="Show scoreboard"
               aria-expanded={scoreboardOpen}
               onClick={toggleScoreboard}
@@ -1047,14 +1047,14 @@ if (rightmostScreenX < -1.05) {
   </svg>
 
             </button>
-            <button type="button" data-button-sound="/sounds/runner-close.mp3" onClick={() => onClose?.()}>×</button>
+            <button type="button" data-button-sound="" onClick={() => onClose?.()}>×</button>
           </div>
 
           {scoreboardOpen && (
             <button
               type="button"
               className="cosmicRunnerScoreboardBackdrop"
-              data-button-sound="/sounds/runner-close.mp3"
+              data-button-sound=""
               aria-label="Close scoreboard"
               onClick={() => setScoreboardOpen(false)}
             />
@@ -1069,7 +1069,7 @@ if (rightmostScreenX < -1.05) {
                 </div>
                 <button
                   type="button"
-                  data-button-sound="/sounds/runner-close.mp3"
+                  data-button-sound=""
                   aria-label="Close scoreboard"
                   onClick={() => setScoreboardOpen(false)}
                 >
@@ -1114,14 +1114,14 @@ if (rightmostScreenX < -1.05) {
               />
               <button
                 type="submit"
-                data-button-sound="/sounds/runner-save-score.mp3"
+                data-button-sound="/sounds/intro-enter.mp3"
                 disabled={submittingScore || scoreSubmitted}
               >
                 {scoreSubmitted ? "Saved" : submittingScore ? "Saving..." : "Save score"}
               </button>
             </form>
             <p className="cosmicRunnerSubmitStatus">{leaderboardMessage}</p>
-            <button type="button" data-button-sound="/sounds/runner-play-again.mp3" onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }))}>
+            <button type="button" data-button-sound="/sounds/intro-enter.mp3" onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }))}>
               Play again
             </button>
           </div>
