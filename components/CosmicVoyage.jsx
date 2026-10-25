@@ -3315,11 +3315,14 @@ const {
   const [movingBgSymbols, setMovingBgSymbols] = useState([]);
   const [introFinished, setIntroFinished] = useState(false);
   const [coreModelsReady, setCoreModelsReady] = useState(false);
-  const [selectedLanguageCode, setSelectedLanguageCode] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_LANGUAGE_CODE;
 
-    return window.localStorage.getItem('amij-language-code') || DEFAULT_LANGUAGE_CODE;
-  });
+
+const [selectedLanguageCode, setSelectedLanguageCode] =
+  useState(DEFAULT_LANGUAGE_CODE);
+
+const [languageRestored, setLanguageRestored] = useState(false);
+
+
   const [showMainTranslateModal, setShowMainTranslateModal] = useState(false);
   const mainTranslateGlbStageRef = useRef(null);
   const [mainTranslateGlbStatusKey, setMainTranslateGlbStatusKey] = useState('chooseLanguage');
@@ -3365,15 +3368,45 @@ const {
   }
 }, []);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('amij-language-code', selectedLanguageCode);
-    }
 
-    if (typeof document !== 'undefined') {
-      document.documentElement.lang = getDocumentLangCode(selectedLanguageCode);
+// Restore the visitor's saved language after hydration.
+useEffect(() => {
+  try {
+    const savedLanguage = window.localStorage.getItem(
+      'amij-language-code'
+    );
+
+    const isSupported = TRANSLATE_LANGUAGE_OPTIONS.some(
+      (language) => language.code === savedLanguage
+    );
+
+    if (isSupported) {
+      setSelectedLanguageCode(savedLanguage);
     }
-  }, [selectedLanguageCode]);
+  } catch {
+    // Continue with English if browser storage is unavailable.
+  }
+
+  setLanguageRestored(true);
+}, []);
+
+// Save future language changes only after restoration.
+useEffect(() => {
+  if (!languageRestored) return;
+
+  try {
+    window.localStorage.setItem(
+      'amij-language-code',
+      selectedLanguageCode
+    );
+  } catch {
+    // Browser storage may be unavailable.
+  }
+
+  document.documentElement.lang =
+    getDocumentLangCode(selectedLanguageCode);
+}, [selectedLanguageCode, languageRestored]);
+
 
 
   useEffect(() => {
