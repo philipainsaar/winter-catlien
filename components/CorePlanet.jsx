@@ -61,6 +61,7 @@ export default function CorePlanet({
     const element = host.current;
     let disposed = false;
     let model, mixer, renderer;
+    let customHeartTexture = null;
     let visible = true;
     let previousTime;
     let elapsed = 0;
@@ -80,7 +81,7 @@ export default function CorePlanet({
       console.error('CorePlanet renderer:', error);
       // Schedule the fallback after setup, just like asynchronous loading failures.
       queueMicrotask(() => { if (!disposed) setFailed(true); });
-      return () => { disposed = true; };
+      return () => { disposed = true; customHeartTexture?.dispose(); };
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -171,8 +172,65 @@ preloadCorePlanet()
         : object.material.clone();
     });
 
-    applyCorePlanetMaterials(model);
-    scene.add(model);
+    
+applyCorePlanetMaterials(model);
+
+// Load a custom texture for the heart only.
+const heart = model.getObjectByName('Heart');
+
+if (heart) {
+  const textureLoader = new THREE.TextureLoader();
+
+  textureLoader.load(
+    '/images/coreplanet-heart.png',
+
+    (texture) => {
+      // Do not update a CorePlanet that has already closed.
+      if (disposed) {
+        texture.dispose();
+        return;
+      }
+
+      texture.colorSpace = THREE.SRGBColorSpace;
+
+      // Required for textures applied to glTF UV mapping.
+      texture.flipY = false;
+
+      texture.magFilter = THREE.LinearFilter;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.needsUpdate = true;
+
+      heart.traverse((object) => {
+        if (!object.isMesh) return;
+
+        const materials = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+
+        materials.forEach((material) => {
+          if (!material?.isMeshStandardMaterial) return;
+
+          material.map = texture;
+          material.color.set('#ffffff');
+          material.needsUpdate = true;
+        });
+      });
+
+      customHeartTexture = texture;
+    },
+
+    undefined,
+
+    (error) => {
+      console.error('Heart texture failed to load:', error);
+    }
+  );
+} else {
+  console.warn('CorePlanet: Heart object was not found.');
+}
+
+scene.add(model);
+
 
     mixer = new THREE.AnimationMixer(model);
 
