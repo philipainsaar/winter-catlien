@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { applyCorePlanetMaterials } from './corePlanetMaterials';
 import { createSparkleMaterial } from './corePlanetSparkles';
+import { createSparkleRotation } from './corePlanetAnimations';
 import styles from './CorePlanet.module.css';
 
 let modelBytes;
@@ -218,7 +219,16 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
 
       scene.add(model);
       mixer = new THREE.AnimationMixer(model);
-      for (const clip of gltf.animations) mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+      for (const clip of gltf.animations) {
+        // Replace the reference sparkle's eased 10-second turn; keep the baked
+        // ring, heart pulse and main sphere animation at their existing speeds.
+        if (clip.tracks.some((track) => track.name === `${sparkleOverlay?.name}.quaternion`)) continue;
+        mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+      }
+      if (sparkleOverlay) {
+        mixer.clipAction(createSparkleRotation(sparkleOverlay.name))
+          .setLoop(THREE.LoopRepeat, Infinity).play();
+      }
       // The 0.4x orbit is baked into the GLB. Do not slow the mixer again.
       mixer.setTime(0);
       element.dataset.loaded = 'true';
