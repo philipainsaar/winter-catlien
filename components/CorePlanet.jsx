@@ -62,15 +62,14 @@ export default function CorePlanet({
     let disposed = false;
     let model, mixer, renderer;
     let customHeartTexture = null;
-    let customSphereTexture = null;
     let visible = true;
     let previousTime;
     let elapsed = 0;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.08, 150);
-    camera.position.set(0.85, 0.7, 5.8);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(17.9, 0.9, 0.6);
+    camera.lookAt(0, 0.15, 0);
     scene.add(new THREE.HemisphereLight(0xffffff, 0xf4d4fa, 1.3));
     const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(7, 10, 12); scene.add(key);
@@ -82,11 +81,7 @@ export default function CorePlanet({
       console.error('CorePlanet renderer:', error);
       // Schedule the fallback after setup, just like asynchronous loading failures.
       queueMicrotask(() => { if (!disposed) setFailed(true); });
-      return () => {
-        disposed = true;
-        customHeartTexture?.dispose();
-        customSphereTexture?.dispose();
-      };
+      return () => { disposed = true; customHeartTexture?.dispose(); };
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -95,7 +90,7 @@ export default function CorePlanet({
     element.appendChild(renderer.domElement);
     const canvas = renderer.domElement;
     const controls = new OrbitControls(camera, canvas);
-    controls.target.set(0, 0, 0);
+    controls.target.set(0, 0.15, 0);
     controls.enablePan = false;
     controls.enableZoom = false;
     controls.enableDamping = true;
@@ -146,12 +141,10 @@ export default function CorePlanet({
       const { width, height } = element.getBoundingClientRect();
       if (!width || !height) return;
       camera.aspect = width / height;
-      const halfFov = 22 * Math.PI / 180;
-      const aspectFit = Math.max(1, 1 / camera.aspect);
-      camera.fov = Math.min(
-        100,
-        2 * Math.atan(Math.tan(halfFov) * aspectFit) * 180 / Math.PI
-      );
+      // Fit the entire ring's bounding sphere, including clearance, at any angle.
+      const halfFov = viewport ? Math.asin(6.3 / camera.position.distanceTo(controls.target)) : 19 * Math.PI / 180;
+      const aspectFit = viewport ? Math.max(1, 1 / camera.aspect) : Math.max(1, 1.4 / camera.aspect);
+      camera.fov = 2 * Math.atan(Math.tan(halfFov) * aspectFit) * 180 / Math.PI;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
     };
@@ -180,164 +173,63 @@ preloadCorePlanet()
     });
 
     
-    // Preserve the ORIGINAL Sphere and Torus materials/behavior.
-    // The legacy shader is applied ONLY when both original objects exist.
-    const legacySphere = model.getObjectByName('Sphere');
-    const legacyOrbit = model.getObjectByName('Torus');
-    if (legacySphere?.isMesh && legacyOrbit?.isMesh) {
-      applyCorePlanetMaterials(model);
-    }
+applyCorePlanetMaterials(model);
 
-    // The heart can be named "Heart" or "Heart • heartbeat animation".
-    // Keep the separate PNG override, even if the GLB has embedded textures.
-    const heart = model.getObjectByName('Heart') ||
-      model.children.find((object) => /^Heart(?:\s|$|[•._-])/i.test(object.name));
+// Load a custom texture for the heart only.
+const heart = model.getObjectByName('Heart');
 
-    const textureLoader = new THREE.TextureLoader();
+if (heart) {
+  const textureLoader = new THREE.TextureLoader();
 
-    if (heart) {
-      textureLoader.load(
-        '/images/coreplanet-heart.png',
-        (texture) => {
-          if (disposed) {
-            texture.dispose();
-            return;
-          }
+  textureLoader.load(
+    '/images/coreplanet-heart.png',
 
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.flipY = false; // glTF UV convention
-          texture.magFilter = THREE.LinearFilter;
-          texture.minFilter = THREE.LinearMipmapLinearFilter;
-          texture.needsUpdate = true;
+    (texture) => {
+      // Do not update a CorePlanet that has already closed.
+      if (disposed) {
+        texture.dispose();
+        return;
+      }
 
-          // Do NOT apply the heart texture to the glint meshes underneath Heart.
-          const heartMeshes = [];
-          heart.traverse((object) => {
-            if (object.isMesh && !/glint|sparkle/i.test(object.name)) {
-              heartMeshes.push(object);
-            }
-          });
+      texture.colorSpace = THREE.SRGBColorSpace;
 
-          heartMeshes.forEach((mesh) => {
-            const materials = Array.isArray(mesh.material)
-              ? mesh.material
-              : [mesh.material];
-            materials.forEach((material) => {
-              if (!material?.isMeshStandardMaterial && !material?.isMeshPhysicalMaterial) return;
-              material.map = texture;
-              material.color.set('#ffffff');
-              material.needsUpdate = true;
-            });
-          });
-          customHeartTexture = texture;
-        },
-        undefined,
-        (error) => console.error('Heart texture failed to load:', error)
-      );
-    } else {
-      console.warn('CorePlanet: Heart object was not found.');
-    }
+      // Required for textures applied to glTF UV mapping.
+      texture.flipY = false;
 
-    // Find the original INNER sphere without touching its material.
-    // Supports both legacy "Sphere" and the newer "Sphere • spin" node.
-    let innerSphere = model.getObjectByName('Sphere');
-    if (!innerSphere?.isMesh) {
-      model.traverse((object) => {
-        if (
-          !innerSphere?.isMesh &&
-          object.isMesh &&
-          /^sphere(?:$|[ .•_-])/i.test(object.name) &&
-          !/sparkle|glint/i.test(object.name)
-        ) {
-          innerSphere = object;
-        }
-      });
-    }
+      texture.magFilter = THREE.LinearFilter;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.needsUpdate = true;
 
-    // A separate OUTER mesh is preferred if the GLB already has one.
-    // Also support a mesh whose material (rather than object) is named Sphere.Sparkle.
-    let sparkleShell = model.getObjectByName('Sphere.Sparkle');
-    if (!sparkleShell) {
-      model.traverse((object) => {
-        if (sparkleShell || !object.isMesh) return;
+      heart.traverse((object) => {
+        if (!object.isMesh) return;
+
         const materials = Array.isArray(object.material)
           ? object.material
           : [object.material];
-        if (materials.some((material) => material?.name === 'Sphere.Sparkle')) {
-          sparkleShell = object;
-        }
-      });
-    }
 
-    // The currently exported CorePlanet2.glb may contain only one sphere.
-    // Create the OUTER shell using the inner sphere's geometry and UVs in that case.
-    // Parenting to the inner sphere makes it follow its baked orbit/spin animation.
-    if (!sparkleShell && innerSphere?.isMesh) {
-      sparkleShell = new THREE.Mesh(innerSphere.geometry);
-      sparkleShell.name = 'Sphere.Sparkle';
-      sparkleShell.scale.setScalar(1.045);
-      sparkleShell.visible = false; // Show it only after its texture loads.
-      innerSphere.add(sparkleShell);
-    }
+        materials.forEach((material) => {
+          if (!material?.isMeshStandardMaterial) return;
 
-    if (sparkleShell) {
-      const sparkleMeshes = [];
-      sparkleShell.traverse((object) => {
-        // Absolutely never replace the INNER Sphere's material.
-        if (object.isMesh && object !== innerSphere) sparkleMeshes.push(object);
+          material.map = texture;
+          material.color.set('#ffffff');
+          material.needsUpdate = true;
+        });
       });
 
-      textureLoader.load(
-        '/images/sphere-sparkle.png',
-        (texture) => {
-          if (disposed) {
-            texture.dispose();
-            return;
-          }
+      customHeartTexture = texture;
+    },
 
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.flipY = false; // glTF UV convention
-          texture.magFilter = THREE.LinearFilter;
-          texture.minFilter = THREE.LinearMipmapLinearFilter;
-          texture.needsUpdate = true;
+    undefined,
 
-          sparkleMeshes.forEach((mesh) => {
-            if (!mesh.geometry?.getAttribute('uv')) {
-              console.warn('Sphere.Sparkle needs UVs to display its PNG:', mesh.name);
-              return;
-            }
-            // The old materials belong to this instance, not the cached GLB.
-            const oldMaterials = Array.isArray(mesh.material)
-              ? mesh.material
-              : [mesh.material];
-            oldMaterials.forEach((material) => material?.dispose());
-
-            // A PNG with alpha creates a sheer sparkly shell, not another opaque globe.
-            mesh.material = new THREE.MeshBasicMaterial({
-              name: 'Sphere.Sparkle',
-              map: texture,
-              color: 0xffffff,
-              transparent: true,
-              opacity: 0.72,
-              depthTest: true,
-              depthWrite: false,
-              side: THREE.FrontSide,
-              toneMapped: false,
-            });
-            mesh.renderOrder = 11;
-            mesh.visible = true;
-          });
-
-          customSphereTexture = texture;
-        },
-        undefined,
-        (error) => console.error('Sphere.Sparkle texture failed to load:', error)
-      );
-    } else {
-      console.warn('CorePlanet: No sphere geometry found for Sphere.Sparkle.');
+    (error) => {
+      console.error('Heart texture failed to load:', error);
     }
+  );
+} else {
+  console.warn('CorePlanet: Heart object was not found.');
+}
 
-    scene.add(model);
+scene.add(model);
 
 
     mixer = new THREE.AnimationMixer(model);
@@ -378,8 +270,6 @@ preloadCorePlanet()
       resizeObserver.disconnect(); intersection.disconnect();
       mixer?.stopAllAction();
       if (model) { mixer?.uncacheRoot(model); disposeModel(model); }
-      customHeartTexture?.dispose();
-      customSphereTexture?.dispose();
       controls.dispose();
       canvas.removeEventListener('pointerdown', pointerDown, true);
       canvas.removeEventListener('pointermove', pointerMove, true);
