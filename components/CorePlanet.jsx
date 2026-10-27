@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { applyCorePlanetMaterials } from './corePlanetMaterials';
+import { createSparkleMaterial } from './corePlanetSparkles';
 import styles from './CorePlanet.module.css';
 
 let modelBytes;
@@ -194,9 +195,10 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       const sparkleOverlay = model.getObjectByName('SphereSparkle');
       if (sparkleOverlay?.isMesh) {
         sparkleOverlay.renderOrder = 12;
-        sparkleOverlay.material.depthWrite = false;
-        // This PNG's alpha contains sparse pink glowing dots and a transparent
-        // background. Don't set it on the original Sphere material!
+        const embeddedMaterial = sparkleOverlay.material;
+        sparkleOverlay.material = createSparkleMaterial(embeddedMaterial.map);
+        embeddedMaterial.dispose();
+        // Apply the same Blender mapping and ramp to embedded and external PNGs.
         textureLoader.load('/images/sphere-sparkle.png', (texture) => {
           if (disposed) { texture.dispose(); return; }
           texture.colorSpace = THREE.SRGBColorSpace;
@@ -206,18 +208,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
             if (old && !replacedTextures.has(old)) { old.dispose(); replacedTextures.add(old); }
           }
           sparkleOverlay.material.dispose();
-          sparkleOverlay.material = new THREE.MeshBasicMaterial({
-            name: 'Sphere.Sparkle / user PNG alpha',
-            map: texture,
-            color: 0xffffff,
-            transparent: true,
-            opacity: 1, // PNG pixels provide the alpha; do not flatten.
-            alphaTest: 0.01,
-            depthWrite: false,
-            depthTest: true,
-            toneMapped: false,
-            side: THREE.FrontSide,
-          });
+          sparkleOverlay.material = createSparkleMaterial(texture);
           sparkleOverlay.renderOrder = 12;
         }, undefined, () => {
           // Keep the embedded PNG material if the external file is missing.
