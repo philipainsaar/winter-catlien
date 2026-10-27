@@ -10,7 +10,7 @@ import styles from './CorePlanet.module.css';
 let modelBytes;
 function loadModelBytes() {
   if (!modelBytes) {
-    modelBytes = fetch('/models/CorePlanet2.glb?v=work-heart-satellite-1').then((response) => {
+    modelBytes = fetch('/models/CorePlanet2.glb?v=blender-sparkle-3').then((response) => {
       if (!response.ok) throw new Error(`CorePlanet: HTTP ${response.status}`);
       return response.arrayBuffer();
     }).catch((error) => { modelBytes = null; throw error; });
@@ -50,6 +50,8 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
     const element = host.current;
     let disposed = false;
     let model, mixer, renderer;
+    const hitTest = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
     let visible = true;
     let previousTime;
     let elapsed = 0;
@@ -125,6 +127,17 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
     canvas.addEventListener('pointercancel', pointerCancel, true);
     element.addEventListener('keydown', keyDown);
 
+    element.containsPlanetPoint = (x, y) => {
+      if (!model) return true;
+      const rect = canvas.getBoundingClientRect();
+      pointer.set((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2);
+      hitTest.setFromCamera(pointer, camera);
+      return hitTest.intersectObject(model, true).some(({ object }) => {
+        for (let parent = object; parent; parent = parent.parent) if (!parent.visible) return false;
+        return true;
+      });
+    };
+
     const resize = () => {
       const { width, height } = element.getBoundingClientRect();
       if (!width || !height) return;
@@ -148,22 +161,25 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       if (!gltf) return;
       if (disposed) { disposeModel(gltf.scene); return; }
       model = gltf.scene;
-      // The original main Sphere and Torus are preserved in the updated GLB.
+      // Keep the reference shell and ring geometry with the original viewer materials.
       // Keep the Work viewer's exact pink-purple rim and orbit shaders.
       applyCorePlanetMaterials(model);
 
-      // The new heart geometry is in the same animated Heart node. The GLB
-      // embeds the correct two-sided UV atlas derived from coreplanet-heart.png.
-      // This optional external image makes future texture edits straightforward.
+      // Preserve the reference Blender heart geometry and UVs. This PNG is
+      // extracted from that same export, and is also embedded as a fallback.
       const textureLoader = new THREE.TextureLoader();
+      const replacedTextures = new Set();
       const heart = model.getObjectByName('Heart');
       if (heart?.isMesh) {
-        textureLoader.load('/images/coreplanet-heart-atlas-filled.png', (texture) => {
+        textureLoader.load('/images/coreplanet-reference-heart.png', (texture) => {
           if (disposed) { texture.dispose(); return; }
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.flipY = false;
           texture.needsUpdate = true;
           if (heart.material?.isMeshStandardMaterial) {
+            for (const old of [heart.material.map, heart.material.emissiveMap]) {
+              if (old && !replacedTextures.has(old)) { old.dispose(); replacedTextures.add(old); }
+            }
             heart.material.map = texture;
             heart.material.emissiveMap = texture;
             heart.material.needsUpdate = true;
@@ -174,17 +190,11 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
         });
       }
 
-      // Independent orbiting satellite, NOT a coating on the main Sphere.
-      // The GLB already contains the faint pearlescent sphere underlayer and
-      // its alpha-textured overlaid mesh, plus a separate animation clip.
-      const sparkleBase = model.getObjectByName('Sphere.Sparkle');
-      const sparkleOverlay = model.getObjectByName('Sphere.Sparkle.Texture');
-      if (sparkleBase?.isMesh && sparkleBase.material) {
-        sparkleBase.material.transparent = true;
-        sparkleBase.material.depthWrite = false;
-        sparkleBase.renderOrder = 16;
-      }
+      // GLTFLoader sanitizes dots from exported Blender object names.
+      const sparkleOverlay = model.getObjectByName('SphereSparkle');
       if (sparkleOverlay?.isMesh) {
+        sparkleOverlay.renderOrder = 12;
+        sparkleOverlay.material.depthWrite = false;
         // This PNG's alpha contains sparse pink glowing dots and a transparent
         // background. Don't set it on the original Sphere material!
         textureLoader.load('/images/sphere-sparkle.png', (texture) => {
@@ -192,6 +202,9 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.flipY = false;
           texture.needsUpdate = true;
+          for (const old of [sparkleOverlay.material.map, sparkleOverlay.material.emissiveMap]) {
+            if (old && !replacedTextures.has(old)) { old.dispose(); replacedTextures.add(old); }
+          }
           sparkleOverlay.material.dispose();
           sparkleOverlay.material = new THREE.MeshBasicMaterial({
             name: 'Sphere.Sparkle / user PNG alpha',
@@ -205,7 +218,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
             toneMapped: false,
             side: THREE.FrontSide,
           });
-          sparkleOverlay.renderOrder = 17;
+          sparkleOverlay.renderOrder = 12;
         }, undefined, () => {
           // Keep the embedded PNG material if the external file is missing.
           console.warn('Using embedded Sphere.Sparkle PNG.');
@@ -233,6 +246,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
     });
     return () => {
       disposed = true;
+      delete element.containsPlanetPoint;
       renderer.setAnimationLoop(null);
       resizeObserver.disconnect(); intersection.disconnect();
       mixer?.stopAllAction();
@@ -270,14 +284,10 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
         event.stopPropagation();
         return;
       }
-      // In fullscreen, a click far outside the planet closes the popup.
+      // Only the actual model opens the shop; empty canvas closes the popup.
       // Keyboard activation (event.detail === 0) still follows the link.
       if (!viewport || event.detail === 0) return;
-      const rect = event.currentTarget.getBoundingClientRect();
-      const dx = event.clientX - (rect.left + rect.width / 2);
-      const dy = event.clientY - (rect.top + rect.height / 2);
-      const radius = Math.min(rect.width, rect.height) * 0.3;
-      if (dx * dx + dy * dy > radius * radius) {
+      if (!host.current?.containsPlanetPoint?.(event.clientX, event.clientY)) {
         event.preventDefault();
         event.stopPropagation();
         onBackgroundClick?.();
