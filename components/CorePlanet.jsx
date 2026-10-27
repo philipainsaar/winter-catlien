@@ -198,7 +198,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
         const embeddedMaterial = sparkleOverlay.material;
         sparkleOverlay.material = createSparkleMaterial(embeddedMaterial.map);
         embeddedMaterial.dispose();
-        // Apply the same Blender mapping and ramp to embedded and external PNGs.
+        // Apply the same small-scale, luminous PNG material to both sources.
         textureLoader.load('/images/sphere-sparkle.png', (texture) => {
           if (disposed) { texture.dispose(); return; }
           texture.colorSpace = THREE.SRGBColorSpace;
