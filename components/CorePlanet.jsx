@@ -12,7 +12,7 @@ import styles from './CorePlanet.module.css';
 let modelBytes;
 function loadModelBytes() {
   if (!modelBytes) {
-    modelBytes = fetch('/models/CorePlanet2.glb?v=blender-sparkle-3').then((response) => {
+    modelBytes = fetch('/models/CorePlanet2.glb?v=heart-depth-4').then((response) => {
       if (!response.ok) throw new Error(`CorePlanet: HTTP ${response.status}`);
       return response.arrayBuffer();
     }).catch((error) => { modelBytes = null; throw error; });
