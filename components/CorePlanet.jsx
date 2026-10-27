@@ -17,7 +17,7 @@ let cachedNewHeartPromise = null;
 export function preloadCorePlanet() {
   if (!cachedCorePlanetPromise) {
     cachedCorePlanetPromise = new GLTFLoader()
-      .loadAsync('/models/CorePlanet2Old.glb')
+      .loadAsync('/models/CorePlanet2.glb')
       .catch((error) => {
         cachedCorePlanetPromise = null;
         throw error;
