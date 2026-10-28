@@ -5,9 +5,197 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { applyCorePlanetMaterials } from './corePlanetMaterials';
-import { createSparkleMaterial } from './corePlanetSparkles';
 import { createSparkleRotation } from './corePlanetAnimations';
 import styles from './CorePlanet.module.css';
+
+// Sparse 3D sparkle geometry, procedural glow and two real animated lights.
+// Included here so this single .jsx file replaces the old PNG sparkle layer.
+
+// A few actual faceted 3D crystals, not a tiled PNG starfield.
+// Four tapered 3D rays surround selected crystals; a procedurally generated
+// soft halo provides the camera bloom appearance without postprocessing.
+// Two animated PointLights are real scene lights and can illuminate the heart.
+// This module intentionally does not touch the heart, sphere rim, or orbit.
+
+const SPARKLE_COUNT = 48; // ~8 visible at any viewing angle
+const LARGE_GLINTS = new Set([1, 5, 9, 13]);
+const LIT_GLINTS = new Set([5, 13]);
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const COLORS = ['#fff9ff', '#ffe3fa', '#f9ddff', '#e2eaff', '#fff1fa'];
+
+function makeHaloTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0.00, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.07, 'rgba(255,255,255,0.83)');
+  gradient.addColorStop(0.19, 'rgba(255,255,255,0.23)');
+  gradient.addColorStop(0.43, 'rgba(255,255,255,0.045)');
+  gradient.addColorStop(1.00, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * Attaches sparse, three-dimensional twinkling lights to the existing
+ * SphereSparkle mesh. The original mesh remains as an animation pivot, but
+ * its *material* is hidden so the old tiled PNG no longer draws.
+ *
+ * Returns a controller with update(time, camera). Call update in the normal
+ * Three.js render loop, after mixer.setTime(). All new meshes, materials,
+ * textures and lights are children of `pivot` and are disposed by the site's
+ * existing disposeModel(model) traversal.
+ */
+function createPhysicalSparkles(pivot) {
+  if (!pivot?.isMesh) return null;
+  pivot.geometry.computeBoundingSphere();
+  const bounds = pivot.geometry.boundingSphere;
+  if (!bounds || !(bounds.radius > 0)) return null;
+  const radius = bounds.radius;
+
+  // Do not hide the OBJECT: that would hide its children and stop its spin.
+  // Hiding just the material preserves SphereSparkle's existing animation.
+  const oldMaterial = pivot.material;
+  pivot.material = new THREE.MeshBasicMaterial({
+    name: 'Invisible original sparkle surface (3D light pivot)',
+    visible: false,
+    depthWrite: false,
+  });
+  for (const material of [oldMaterial].flat().filter(Boolean)) material.dispose();
+
+  const octahedron = new THREE.OctahedronGeometry(1, 0);
+  const taperedRay = new THREE.ConeGeometry(0.18, 1, 3);
+  const haloTexture = makeHaloTexture();
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const items = [];
+
+  for (let index = 0; index < SPARKLE_COUNT; index += 1) {
+    // Fibonacci-sphere placement: sparse and evenly scattered around the
+    // whole planet, so turning it reveals glints without visible tiling.
+    const height = 1 - (2 * (index + 0.5)) / SPARKLE_COUNT;
+    const radial = Math.sqrt(Math.max(0, 1 - height * height));
+    const longitude = index * GOLDEN_ANGLE + 0.42;
+    const normal = new THREE.Vector3(
+      radial * Math.cos(longitude),
+      height,
+      radial * Math.sin(longitude),
+    );
+    const large = LARGE_GLINTS.has(index);
+    const size = radius * (large ? 0.055 : 0.022 + (index % 4) * 0.0025);
+    const color = new THREE.Color(COLORS[index % COLORS.length]);
+    const group = new THREE.Group();
+    group.name = `PhysicalSparkle_${index + 1}`;
+    group.position.copy(bounds.center).addScaledVector(normal, radius * 1.022);
+    group.quaternion.setFromUnitVectors(zAxis, normal);
+    pivot.add(group);
+
+    const material = new THREE.MeshStandardMaterial({
+      name: `Animated emissive crystal ${index + 1}`,
+      color,
+      emissive: color,
+      emissiveIntensity: 0.65,
+      metalness: 0.15,
+      roughness: 0.12,
+      flatShading: true,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+      depthTest: true,
+      toneMapped: false,
+    });
+    const crystal = new THREE.Mesh(octahedron, material);
+    crystal.name = 'Faceted3DCrystal';
+    crystal.scale.set(size, size, size * 0.75);
+    crystal.renderOrder = 12;
+    group.add(crystal);
+
+    // Every fourth glint has four *3D* tapered crystal rays, rather than
+    // a flat cross printed onto the sphere's UV texture.
+    if (large) {
+      for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ray = new THREE.Mesh(taperedRay, material);
+        ray.name = 'Tapered3DStarRay';
+        ray.scale.set(size * 0.7, size * 2.7, size * 0.7);
+        ray.position.set(x * size * 1.08, y * size * 1.08, 0);
+        ray.quaternion.setFromUnitVectors(yAxis, new THREE.Vector3(x, y, 0));
+        ray.renderOrder = 12;
+        group.add(ray);
+      }
+    }
+
+    // Halos are generated in memory and are strictly supporting effects;
+    // the lit crystal and rays above are genuine 3D geometry.
+    let halo = null;
+    if (haloTexture) {
+      halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        name: `Soft glow ${index + 1}`,
+        map: haloTexture,
+        color,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        opacity: 0.15,
+        toneMapped: false,
+      }));
+      halo.scale.setScalar(radius * (large ? 0.42 : 0.20));
+      halo.position.z = size * 0.17;
+      halo.renderOrder = 13;
+      group.add(halo);
+    }
+
+    let light = null;
+    if (LIT_GLINTS.has(index)) {
+      light = new THREE.PointLight(color, 0, radius * 2.5, 2);
+      light.name = `RealSparklePointLight_${index + 1}`;
+      light.position.z = radius * 0.07;
+      group.add(light);
+    }
+
+    items.push({ group, normal, material, halo, light, large,
+      phase: index * 1.783 + 0.77,
+      speed: 0.72 + (index % 5) * 0.115 });
+  }
+
+  const worldRotation = new THREE.Quaternion();
+  const worldPosition = new THREE.Vector3();
+  const worldNormal = new THREE.Vector3();
+  const toCamera = new THREE.Vector3();
+
+  return {
+    update(seconds, camera) {
+      pivot.getWorldQuaternion(worldRotation);
+      for (const item of items) {
+        item.group.getWorldPosition(worldPosition);
+        worldNormal.copy(item.normal).applyQuaternion(worldRotation).normalize();
+        toCamera.subVectors(camera.position, worldPosition).normalize();
+        // Hide glints on the far hemisphere. The pastel sphere shell is
+        // transparent and doesn't write depth, so facing matters here.
+        const facing = THREE.MathUtils.smoothstep(worldNormal.dot(toCamera), 0.02, 0.38);
+        item.group.visible = facing > 0.01;
+        if (!item.group.visible) continue;
+
+        const wave = 0.5 + 0.5 * Math.sin(seconds * item.speed + item.phase);
+        const flash = Math.pow(wave, item.large ? 9 : 13);
+        const slow = 0.88 + 0.12 * Math.sin(seconds * 0.28 + item.phase);
+        const intensity = flash * slow;
+        item.material.emissiveIntensity = 0.55 + 3.7 * intensity;
+        item.material.opacity = facing * (0.26 + (item.large ? 0.72 : 0.48) * intensity);
+        if (item.halo) {
+          item.halo.material.opacity = facing * (0.012 + (item.large ? 0.70 : 0.30) * intensity);
+        }
+        item.group.scale.setScalar(0.80 + 0.32 * intensity);
+        if (item.light) item.light.intensity = facing * (0.12 + 5.8 * intensity);
+      }
+    },
+  };
+}
 
 let modelBytes;
 function loadModelBytes() {
@@ -52,6 +240,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
     const element = host.current;
     let disposed = false;
     let model, mixer, renderer;
+    let sparkleEffect;
     const hitTest = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let visible = true;
@@ -173,7 +362,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       const replacedTextures = new Set();
       const heart = model.getObjectByName('Heart');
       if (heart?.isMesh) {
-        textureLoader.load('/images/coreplanet-reference-heart.png', (texture) => {
+        textureLoader.load('/images/coreplanet-heart.png', (texture) => {
           if (disposed) { texture.dispose(); return; }
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.flipY = false;
@@ -192,29 +381,11 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
         });
       }
 
-      // GLTFLoader sanitizes dots from exported Blender object names.
+      // Keep the original SphereSparkle animation pivot, but replace its
+      // repeated PNG with sparse 3D crystals, subtle halos and real lights.
       const sparkleOverlay = model.getObjectByName('SphereSparkle');
       if (sparkleOverlay?.isMesh) {
-        sparkleOverlay.renderOrder = 12;
-        const embeddedMaterial = sparkleOverlay.material;
-        sparkleOverlay.material = createSparkleMaterial(embeddedMaterial.map);
-        embeddedMaterial.dispose();
-        // Apply the same small-scale, luminous PNG material to both sources.
-        textureLoader.load('/images/sphere-sparkle.png', (texture) => {
-          if (disposed) { texture.dispose(); return; }
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.flipY = false;
-          texture.needsUpdate = true;
-          for (const old of [sparkleOverlay.material.map, sparkleOverlay.material.emissiveMap]) {
-            if (old && !replacedTextures.has(old)) { old.dispose(); replacedTextures.add(old); }
-          }
-          sparkleOverlay.material.dispose();
-          sparkleOverlay.material = createSparkleMaterial(texture);
-          sparkleOverlay.renderOrder = 12;
-        }, undefined, () => {
-          // Keep the embedded PNG material if the external file is missing.
-          console.warn('Using embedded Sphere.Sparkle PNG.');
-        });
+        sparkleEffect = createPhysicalSparkles(sparkleOverlay);
       }
 
       scene.add(model);
@@ -242,6 +413,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       if (!visible || document.hidden) return;
       if (!reducedMotion.matches) elapsed += delta;
       mixer?.setTime(reducedMotion.matches ? 0 : elapsed);
+      sparkleEffect?.update(reducedMotion.matches ? 0 : elapsed, camera);
       controls.update();
       renderer.render(scene, camera);
     });
