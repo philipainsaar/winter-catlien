@@ -8,6 +8,18 @@ import { applyCorePlanetMaterials } from './corePlanetMaterials';
 import { createSparkleRotation } from './corePlanetAnimations';
 import styles from './CorePlanet.module.css';
 
+// ===== RESPONSIVE MINI GAME GLOBE =======================================
+// These settings affect ONLY the small pink wireframe globe above CorePlanet.
+// They do not resize CorePlanet itself or alter its animations.
+const GAME_GLOBE_MAX_SIZE = 112;       // Largest visible icon, in CSS pixels
+const GAME_GLOBE_MIN_SIZE = 42;        // Keep a comfortable click target
+const GAME_GLOBE_WIDTH_RATIO = 0.24;  // Also limit size on narrow screens
+const GAME_GLOBE_PLANET_GAP = 13;     // Minimum gap above the visible planet rim
+const GAME_GLOBE_TITLE_GAP = 9;       // Space below the popup heading
+// If no room remains above the planet, place a small button in the upper corner.
+const GAME_GLOBE_COMPACT_SIZE = 48;
+// =======================================================================
+
 // ===== REAL 3D ORBIT SHOP BUTTON =======================================
 // A curved, physically beveled pill is mounted ON the animated GLB Torus.
 // Its geometry wraps along the torus centerline and is hidden by the planet.
@@ -1452,6 +1464,74 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       return false;
     };
 
+    // The game globe is a sibling of this component inside the popup.
+    // Use the ACTUAL projection of Sphere, rather than fixed vh/vw breakpoints:
+    // portrait, tablet and desktop have very different planet silhouettes.
+    // The CSS has important rules, so override those specific properties with
+    // equally-important inline values. Only the little game button is changed.
+    const gameGlobeLayout = { last: '' };
+    const sphereCenterWorld = new THREE.Vector3();
+    const sphereCenterNdc = new THREE.Vector3();
+    const sphereWorldScale = new THREE.Vector3();
+    const layoutGameGlobe = () => {
+      if (!viewport || !model || disposed) return;
+      const dialog = element.closest('[role="dialog"]');
+      const gameButton = dialog?.querySelector('.collectionMiniGlobeGameButton');
+      const globe = model.getObjectByName('Sphere');
+      if (!gameButton || !globe?.isMesh) return;
+
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+      if (!globe.geometry.boundingSphere) globe.geometry.computeBoundingSphere();
+      if (!globe.geometry.boundingSphere) return;
+      model.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+
+      sphereCenterWorld.copy(globe.geometry.boundingSphere.center)
+        .applyMatrix4(globe.matrixWorld);
+      sphereCenterNdc.copy(sphereCenterWorld).project(camera);
+      globe.getWorldScale(sphereWorldScale);
+      const worldRadius = globe.geometry.boundingSphere.radius *
+        Math.max(sphereWorldScale.x, sphereWorldScale.y, sphereWorldScale.z) *
+        (1 + (SHELL_HOLO_ENABLED ? SHELL_HOLO_GAP : 0));
+      const distance = camera.position.distanceTo(sphereCenterWorld);
+      if (!Number.isFinite(distance) || distance <= worldRadius) return;
+      const focalPixels = rect.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)));
+      const apparentRadius = focalPixels * worldRadius /
+        Math.sqrt(distance * distance - worldRadius * worldRadius);
+      const sphereTop = rect.top + (1 - sphereCenterNdc.y) * 0.5 * rect.height - apparentRadius;
+
+      const headingBottom = Math.max(rect.top + 5,
+        dialog.querySelector('.missionGalleryTitleBar')?.getBoundingClientRect().bottom ?? rect.top + 30);
+      const top = headingBottom + GAME_GLOBE_TITLE_GAP;
+      const available = sphereTop - GAME_GLOBE_PLANET_GAP - top;
+      let size = Math.min(GAME_GLOBE_MAX_SIZE, rect.width * GAME_GLOBE_WIDTH_RATIO, available);
+      let left = rect.left + rect.width * 0.5;
+      let y = top;
+
+      if (size < GAME_GLOBE_MIN_SIZE) {
+        // Extremely short landscape screens cannot fit the heading, the icon,
+        // and the planet vertically. Move the small icon to a free side corner
+        // instead of letting it collide with the planet or disappear.
+        size = Math.min(GAME_GLOBE_COMPACT_SIZE, rect.width * 0.16);
+        const screenCenterX = rect.left + (1 + sphereCenterNdc.x) * 0.5 * rect.width;
+        const rightSpace = rect.right - (screenCenterX + apparentRadius);
+        const leftSpace = screenCenterX - apparentRadius - rect.left;
+        left = rightSpace >= leftSpace ? rect.right - size * 0.5 - 12 : rect.left + size * 0.5 + 12;
+        y = Math.max(rect.top + 8, top);
+      }
+
+      // Avoid repeated DOM writes during animated orbit-camera damping.
+      const layout = [Math.round(size), Math.round(left), Math.round(y)].join(':');
+      if (layout === gameGlobeLayout.last) return;
+      gameGlobeLayout.last = layout;
+      gameButton.style.setProperty('width', `${Math.round(size)}px`, 'important');
+      gameButton.style.setProperty('height', `${Math.round(size)}px`, 'important');
+      gameButton.style.setProperty('left', `${Math.round(left)}px`, 'important');
+      gameButton.style.setProperty('top', `${Math.round(y)}px`, 'important');
+      gameButton.style.setProperty('transform', 'translateX(-50%)', 'important');
+    };
+
     const resize = () => {
       const { width, height } = element.getBoundingClientRect();
       if (!width || !height) return;
@@ -1462,6 +1542,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       camera.fov = 2 * Math.atan(Math.tan(halfFov) * aspectFit) * 180 / Math.PI;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
+      layoutGameGlobe();
     };
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(element); resize();
@@ -1541,11 +1622,17 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
         orbitShopMesh?.update(0, 0, false);
       }
       element.dataset.loaded = 'true';
+      layoutGameGlobe();
     }).catch((error) => {
       if (!disposed) { console.error('CorePlanet model:', error); setFailed(true); }
     });
 
+    let lastGameGlobeCheck = -Infinity;
     renderer.setAnimationLoop((time) => {
+      if (viewport && time - lastGameGlobeCheck >= 400) {
+        lastGameGlobeCheck = time;
+        layoutGameGlobe();
+      }
       const delta = previousTime === undefined ? 0 : Math.min((time - previousTime) / 1000, 0.1);
       previousTime = time;
       if (!visible || document.hidden) return;
