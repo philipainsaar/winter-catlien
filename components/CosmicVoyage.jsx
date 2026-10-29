@@ -5165,14 +5165,15 @@ if (state.landed) {
           open={runnerGameOpen}
           onClose={() => {
             requestSiteMusic('stop', RUNNER_GAME_MUSIC_FILE, { reset: true });
-            setRunnerGameOpen(false);
+            // Restore the boat and water scene instead of reopening CorePlanet.
+            resetExperience();
           }}
           imagePath={RUNNER_CAT_IMAGE_URL}
         />
       )}
 	          
 
-	      {popupOpen && (
+	      {popupOpen && !runnerGameOpen && (
         <div
           className="missionGalleryBackdrop"
           role="presentation"
