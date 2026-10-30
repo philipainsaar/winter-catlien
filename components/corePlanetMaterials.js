@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 
+// Orbit ring ONLY: independent from the sphere's underlying gradient.
+const ORBIT_RING_PINK = '#f5cde7';
+const ORBIT_RING_WHITE_HIGHLIGHT = 0.18; // 0 = fully pink, 0.18 = soft sheen
+
+
 // Each instance owns its materials. The original image and UVs stay on Heart.
 export function applyCorePlanetMaterials(root) {
 const liveSphereMat=new THREE.ShaderMaterial({
   transparent:true,depthWrite:false,depthTest:true,side:THREE.FrontSide,toneMapped:false,
   uniforms:{
-    pink:{value:new THREE.Color('#f46fc4')},
-    lilac:{value:new THREE.Color('#c69fe8')},
-    blue:{value:new THREE.Color('#a1c7ff')},
+    pink:{value:new THREE.Color('#e093c4db')},
+    lilac:{value:new THREE.Color('#c69fe898')},
+    blue:{value:new THREE.Color('#a1c7ff8d')},
     ice:{value:new THREE.Color('#d9e9ff')}
   },
   vertexShader:`varying vec3 vn;varying vec3 vp;
@@ -29,7 +34,7 @@ const liveSphereMat=new THREE.ShaderMaterial({
 // This avoids object-level transparent sorting errors where ring and shell cross.
 function ringMaterial(frontPass){
  return new THREE.ShaderMaterial({transparent:true,depthTest:true,depthWrite:false,side:THREE.FrontSide,
- uniforms:{pink:liveSphereMat.uniforms.pink,center:{value:new THREE.Vector3()},radius:{value:3.854954},frontPass:{value:frontPass}},
+ uniforms:{pink:{value:new THREE.Color(ORBIT_RING_PINK)},center:{value:new THREE.Vector3()},radius:{value:3.854954},frontPass:{value:frontPass}},
  vertexShader:liveSphereMat.vertexShader,
  fragmentShader:`varying vec3 vn;varying vec3 vp;uniform vec3 pink,center;uniform float radius;uniform bool frontPass;
  void main(){
@@ -39,7 +44,7 @@ function ringMaterial(frontPass){
    if(discriminant>0.0){float entry=along-sqrt(discriminant);behind=entry>0.0 && length(vp)>entry+0.001;}
    if(frontPass==behind)discard;
    float facing=clamp(dot(normalize(vn),normalize(-vp)),0.0,1.0);
-   vec3 color=mix(pink,vec3(1.0),0.6*pow(facing,7.0));
+   vec3 color=mix(pink,vec3(1.0),${ORBIT_RING_WHITE_HIGHLIGHT.toFixed(2)}*pow(facing,7.0));
    float alpha=mix(0.20,0.72,smoothstep(0.05,0.85,facing));
    gl_FragColor=vec4(color,alpha);
    #include <colorspace_fragment>

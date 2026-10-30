@@ -20,17 +20,18 @@ const GAME_GLOBE_TITLE_GAP = 9;       // Space below the popup heading
 const GAME_GLOBE_COMPACT_SIZE = 48;
 // =======================================================================
 
-// ===== REAL 3D ORBIT SHOP BUTTON =======================================
-// A curved, physically beveled pill is mounted ON the animated GLB Torus.
-// Its geometry wraps along the torus centerline and is hidden by the planet.
+// ===== TWO REAL 3D ROUNDED-STAR SHOP BUTTONS ============================
+// Both stars are physically mounted 180 degrees apart on the animated GLB Torus.
+// Each star follows the ring and disappears when hidden behind the planet.
+// Colors, glow, transparency and animated reflections are independently preserved.
 const ORBIT_SHOP_BUTTON_ENABLED = true;
-const ORBIT_SHOP_BUTTON_TEXT = '· CLICK TO SHOP ·';
-const ORBIT_SHOP_BUTTON_SIZE = 1.0;           // 0.7 compact; 1 normal; 1.4 large
+const ORBIT_SHOP_BUTTON_TEXT = 'SHOP';
+const ORBIT_SHOP_BUTTON_SIZE = 1.6;           // 0.7 compact; 1 normal; 1.4 large
 const ORBIT_SHOP_BUTTON_POSITION = -0.48;     // Where on the visible ring to start (screen Y)
-const ORBIT_SHOP_BUTTON_WIDTH = 2.35;         // Actual width in 3D world units
-const ORBIT_SHOP_BUTTON_HEIGHT = 0.59;        // Actual height in 3D world units
+const ORBIT_SHOP_BUTTON_WIDTH = 1.46;         // Rounded-star width in 3D world units
+const ORBIT_SHOP_BUTTON_HEIGHT = 1.46;        // Rounded-star height in 3D world units
 const ORBIT_SHOP_BUTTON_THICKNESS = 0.08;     // Solid volumetric body thickness
-const ORBIT_SHOP_BUTTON_BEVEL = 0.085;        // Rounded edges
+const ORBIT_SHOP_BUTTON_BEVEL = 0.055;        // Soft 3D beveled star outline
 const ORBIT_SHOP_BUTTON_TILT = 0;             // Extra pitch around ring tangent (degrees); 0 follows ring
 const ORBIT_SHOP_BUTTON_RING_GAP = 0.035;     // Small separation from ring surface (3D units)
 const ORBIT_SHOP_BUTTON_LIFT = 0.10;         // Gentle visual lift above the ring, in local 3D units
@@ -56,6 +57,11 @@ const ORBIT_SHOP_BUTTON_SHIMMER_SPEED = 0.42; // Repeating reflections per secon
 const ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH = 0.30;
 const ORBIT_SHOP_BUTTON_HOVER_BRIGHTNESS = 0.38;
 const ORBIT_SHOP_BUTTON_START_X = 0.0; // 0 = screen center; -0.5 left; +0.5 right
+const ORBIT_SHOP_BUTTON_COUNT = 2;           // Two separate, clickable star meshes
+const ORBIT_SHOP_BUTTON_MIRROR_OFFSET = Math.PI; // Opposite around the torus (180 degrees)
+const ORBIT_SHOP_BUTTON_STAR_POINTS = 4;     // 4 = rounded sparkle-star silhouette
+const ORBIT_SHOP_BUTTON_STAR_INNER_RATIO = 0.58; // Smaller = deeper star valleys
+const ORBIT_SHOP_BUTTON_STAR_ROUNDNESS = 0.20;  // 0 sharp, 0.2 soft, 0.3 very round
 // =====================================================================
 
 // ===== SPARKLE SETTINGS (EDIT THESE ONLY) ==============================
@@ -798,9 +804,9 @@ function measureOrbitTube(geometry) {
  * The entire CTA is actual THREE.Mesh geometry parented to the animated Torus.
  * Thus it inherits the GLB's baked 0.4x orbit movement with zero HTML
  * projection, CSS transforms, or fake depth. The text is a CanvasTexture
- * on the face of a physical, bevelled capsule (no image asset required).
+ * on the faces of two physical, bevelled 3D stars (no image asset required).
  *
- * The underlying translucent globe does not write depth. To make the pill
+ * The underlying translucent globe does not write depth. To make the stars
  * disappear BEHIND that sphere instead of shining through, an explicit
  * sphere/ray depth test is injected into the button's own materials. It
  * discards covered FRAGMENTS rather than hiding the entire button at once.
@@ -830,10 +836,8 @@ function createOrbitShopMesh(ring, globe, camera) {
   const d = ORBIT_SHOP_BUTTON_THICKNESS;
   const bevel = Math.min(ORBIT_SHOP_BUTTON_BEVEL, h * 0.40);
 
-  // Mount on the FRONT of the torus tube, not radially off its left/right
-  // circumference. The local ring frame keeps the bevel and text readable,
-  // while the entire object still rides on Torus as real 3D geometry.
-  // Candidate anchors are checked for occlusion of the entire button.
+  // Find a suitable initial star location. The other is exactly 180° opposite.
+  // Both remain in torus-local coordinates and follow baked GLB movement.
   const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
   const localEye = new THREE.Vector3();
   const ringInverse = ring.matrixWorld.clone().invert();
@@ -898,8 +902,7 @@ function createOrbitShopMesh(ring, globe, camera) {
     projected.copy(centerWorld).project(camera);
     if (projected.z < -1 || projected.z > 1) continue;
     let penalty = 0;
-    // Sample the visible front face and its four corners. This prevents
-    // the 'CLICK TO SH...' clipping seen on the left side of the globe.
+    // Check representative star-face points for clipping and occlusion.
     for (const px of [-0.5, 0, 0.5]) {
       for (const py of [-0.5, 0, 0.5]) {
         const p = corner.clone()
@@ -921,397 +924,468 @@ function createOrbitShopMesh(ring, globe, camera) {
   }
   if (bestAngle === null) return null;
 
-  const mountDistance = ringFrame(bestAngle);
-  const inward = radial.clone().negate();
-  const orbitGroup = new THREE.Group();
-  orbitGroup.name = 'OrbitShopButton_Real3D';
-  // Mount against the camera-facing surface of the curved torus tube.
-  // The small screen-up lift is local to Torus, so the button follows every
-  // ring rotation and will go behind the planet naturally.
-  orbitGroup.position.copy(anchor).addScaledVector(forward, mountDistance)
-    .addScaledVector(up, ORBIT_SHOP_BUTTON_LIFT * scale);
-  orbitGroup.quaternion.setFromRotationMatrix(
-    new THREE.Matrix4().makeBasis(tangent, up, forward),
-  );
-  orbitGroup.scale.setScalar(scale);
-  ring.add(orbitGroup);
+  const orbitRoot = new THREE.Group();
+  orbitRoot.name = 'OrbitShopButton_Real3D';
+  ring.add(orbitRoot);
 
-  // Bend the actual mesh, sidewalls and text around the torus circular arc.
-  // Unlike a rigid flat pill, even the far ends now follow the ring tube.
-  // Each cross-section is parallel-transported as the ring turns under it.
-  const inwardLocal = new THREE.Vector3(0, inward.dot(up), inward.dot(forward));
-  const radialLocal = inwardLocal.clone().negate();
-  const bendAxis = new THREE.Vector3(1, 0, 0).cross(inwardLocal).normalize();
-  const bendRadius = tube.radius / scale;
-  const mountLocal = mountDistance / scale;
-  const liftLocal = ORBIT_SHOP_BUTTON_LIFT;
-  const section = new THREE.Vector3();
-  function wrapToOrbit(geometry) {
-    const attr = geometry.getAttribute('position');
-    for (let i = 0; i < attr.count; i++) {
-      const x = attr.getX(i), y = attr.getY(i), z = attr.getZ(i);
-      const theta = x / bendRadius;
-      const sag = bendRadius * (1 - Math.cos(theta));
-      // Carry the initial forward offset and lift along the actual arc,
-      // preserving a curved pill without deforming the face or text asymmetrically.
-      section.set(0, y + liftLocal, z + mountLocal).applyAxisAngle(bendAxis, theta);
-      attr.setXYZ(i,
-        bendRadius * Math.sin(theta) + section.x,
-        inwardLocal.y * sag + section.y - liftLocal,
-        inwardLocal.z * sag + section.z - mountLocal,
-      );
+  function buildStarButton(theta, index) {
+    const mountDistance = ringFrame(theta);
+    const inward = radial.clone().negate();
+    const orbitGroup = new THREE.Group();
+    orbitGroup.name = `OrbitShopRoundedStar_${index + 1}`;
+    // Mount against the camera-facing surface of the curved torus tube.
+    // The small screen-up lift is local to Torus, so the button follows every
+    // ring rotation and will go behind the planet naturally.
+    orbitGroup.position.copy(anchor).addScaledVector(forward, mountDistance)
+      .addScaledVector(up, ORBIT_SHOP_BUTTON_LIFT * scale);
+    orbitGroup.quaternion.setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(tangent, up, forward),
+    );
+    orbitGroup.scale.setScalar(scale);
+    orbitRoot.add(orbitGroup);
+
+    // Bend the actual mesh, sidewalls and text around the torus circular arc.
+    // Unlike a rigid flat pill, even the far ends now follow the ring tube.
+    // Each cross-section is parallel-transported as the ring turns under it.
+    const inwardLocal = new THREE.Vector3(0, inward.dot(up), inward.dot(forward));
+    const bendAxis = new THREE.Vector3(1, 0, 0).cross(inwardLocal).normalize();
+    const bendRadius = tube.radius / scale;
+    const mountLocal = mountDistance / scale;
+    const liftLocal = ORBIT_SHOP_BUTTON_LIFT;
+    const section = new THREE.Vector3();
+    function wrapToOrbit(geometry) {
+      const attr = geometry.getAttribute('position');
+      for (let i = 0; i < attr.count; i++) {
+        const x = attr.getX(i), y = attr.getY(i), z = attr.getZ(i);
+        const theta = x / bendRadius;
+        const sag = bendRadius * (1 - Math.cos(theta));
+        // Carry the initial forward offset and lift along the actual arc,
+        // preserving a rounded star without deforming the face or text asymmetrically.
+        section.set(0, y + liftLocal, z + mountLocal).applyAxisAngle(bendAxis, theta);
+        attr.setXYZ(i,
+          bendRadius * Math.sin(theta) + section.x,
+          inwardLocal.y * sag + section.y - liftLocal,
+          inwardLocal.z * sag + section.z - mountLocal,
+        );
+      }
+      attr.needsUpdate = true;
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+      geometry.computeBoundingBox();
+      return geometry;
     }
-    attr.needsUpdate = true;
-    geometry.computeVertexNormals();
-    geometry.computeBoundingSphere();
-    geometry.computeBoundingBox();
-    return geometry;
-  }
 
-  function pillShape(width, height, radius) {
-    const r = Math.min(radius, width / 2, height / 2);
-    const x = -width / 2, y = -height / 2;
-    const shape = new THREE.Shape();
-    shape.moveTo(x + r, y);
-    for (let i = 1; i <= 24; i++) {
-      shape.lineTo(x + r + (width - 2 * r) * i / 24, y);
+    function roundedStarShape(width, height) {
+      const points = Math.max(3, Math.floor(ORBIT_SHOP_BUTTON_STAR_POINTS));
+      const inner = THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_STAR_INNER_RATIO, 0.2, 0.95);
+      const roundness = THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_STAR_ROUNDNESS, 0, 0.42);
+      const vertices = [];
+      for (let i = 0; i < points * 2; i += 1) {
+        const angle = -Math.PI / 2 + i * Math.PI / points;
+        const radius = i % 2 === 0 ? 1 : inner;
+        vertices.push(new THREE.Vector2(
+          Math.cos(angle) * width * 0.5 * radius,
+          Math.sin(angle) * height * 0.5 * radius,
+        ));
+      }
+      const shape = new THREE.Shape();
+      for (let i = 0; i < vertices.length; i += 1) {
+        const previous = vertices[(i - 1 + vertices.length) % vertices.length];
+        const current = vertices[i];
+        const next = vertices[(i + 1) % vertices.length];
+        const before = current.clone().lerp(previous, roundness);
+        const after = current.clone().lerp(next, roundness);
+        if (i === 0) shape.moveTo(before.x, before.y);
+        else shape.lineTo(before.x, before.y);
+        shape.quadraticCurveTo(current.x, current.y, after.x, after.y);
+      }
+      shape.closePath();
+      return shape;
     }
-    shape.quadraticCurveTo(x + width, y, x + width, y + r);
-    shape.lineTo(x + width, y + height - r);
-    shape.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-    for (let i = 1; i <= 24; i++) {
-      shape.lineTo(x + width - r - (width - 2 * r) * i / 24, y + height);
+
+    // The curved 3D bevel and front have separate adjustable alpha values.
+    // Both remain properly sphere-occluded by the existing material shader.
+    const bodyGeometry = new THREE.ExtrudeGeometry(roundedStarShape(w, h), {
+      depth: d,
+      bevelEnabled: true,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: 5,
+      curveSegments: 18,
+      steps: 1,
+    });
+    bodyGeometry.translate(0, 0, -d * 0.5);
+    wrapToOrbit(bodyGeometry);
+    const faceZ = d * 0.5 + bevel;
+    // ExtrudeGeometry has separate groups for its front/back and bevel sides.
+    // The cool-blue edge is shaded differently, so this reads as a solid pill
+    // while keeping the SAME pale blue appearance as the original HTML CTA.
+    const bodyMaterial = new THREE.MeshPhysicalMaterial({
+      name: `Shop star ${index + 1} / ice-blue face`,
+      color: ORBIT_SHOP_BUTTON_FACE_COLOR,
+      metalness: 0.02,
+      roughness: 0.18,
+      clearcoat: 1.8,
+      clearcoatRoughness: 0.12,
+      emissive: ORBIT_SHOP_BUTTON_FACE_COLOR,
+      emissiveIntensity: 0.42,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_FACE_OPACITY, 0, 1),
+      depthWrite: false,
+    });
+    const edgeMaterial = new THREE.MeshPhysicalMaterial({
+      name: `Shop star ${index + 1} / soft beveled edge`,
+      color: ORBIT_SHOP_BUTTON_EDGE_COLOR,
+      metalness: 0.04,
+      roughness: 0.25,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.11,
+      emissive: ORBIT_SHOP_BUTTON_EDGE_COLOR,
+      emissiveIntensity: 0.2,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_EDGE_OPACITY, 0, 1),
+      depthWrite: false, // Transparent edges must not punch holes in the ring/heart.
+    });
+    const body = new THREE.Mesh(bodyGeometry, [bodyMaterial, edgeMaterial]);
+    body.name = `OrbitShopStarBody_${index + 1}`;
+    body.renderOrder = 18; // Draw above the front ring so the tube stays UNDER the star.
+    body.castShadow = false;
+    body.receiveShadow = false;
+    orbitGroup.add(body);
+
+    // A custom text canvas becomes a material map on a true 3D front plane.
+    // The texture has NO solid background; the bevelled body provides it.
+    const canvas = document.createElement('canvas');
+    canvas.width = 896;
+    canvas.height = 320;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { orbitRoot.remove(orbitGroup); return null; }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Always honor the top-of-file font weight, even after fitting long text.
+    const fontWeight = Math.max(100, Math.min(900, ORBIT_SHOP_TEXT_WEIGHT));
+    const textFont = (px) => `${fontWeight} ${px}px "Inconsolata", ui-monospace, monospace`;
+    ctx.font = textFont(116);
+    // Fit text inside the curved 3D face without changing button geometry.
+    const maxTextWidth = canvas.width * 0.87;
+    const measuredWidth = ctx.measureText(ORBIT_SHOP_BUTTON_TEXT).width;
+    if (measuredWidth > maxTextWidth) {
+      ctx.font = textFont(Math.max(52, Math.floor(116 * maxTextWidth / measuredWidth)));
     }
-    shape.quadraticCurveTo(x, y + height, x, y + height - r);
-    shape.lineTo(x, y + r);
-    shape.quadraticCurveTo(x, y, x + r, y);
-    return shape;
-  }
+    const textX = canvas.width / 2;
+    const textY = canvas.height / 2;
+    const outlineWidth = Math.max(0, ORBIT_SHOP_TEXT_OUTLINE_WIDTH);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
 
-  // The curved 3D bevel and front have separate adjustable alpha values.
-  // Both remain properly sphere-occluded by the existing material shader.
-  const bodyGeometry = new THREE.ExtrudeGeometry(pillShape(w, h, h / 2 - bevel), {
-    depth: d,
-    bevelEnabled: true,
-    bevelThickness: bevel,
-    bevelSize: bevel,
-    bevelSegments: 5,
-    curveSegments: 14,
-    steps: 1,
-  });
-  bodyGeometry.translate(0, 0, -d * 0.5);
-  wrapToOrbit(bodyGeometry);
-  const faceZ = d * 0.5 + bevel;
-  // ExtrudeGeometry has separate groups for its front/back and bevel sides.
-  // The cool-blue edge is shaded differently, so this reads as a solid pill
-  // while keeping the SAME pale blue appearance as the original HTML CTA.
-  const bodyMaterial = new THREE.MeshPhysicalMaterial({
-    name: 'Shop / original ice-blue rounded face',
-    color: ORBIT_SHOP_BUTTON_FACE_COLOR,
-    metalness: 0.02,
-    roughness: 0.18,
-    clearcoat: 1.8,
-    clearcoatRoughness: 0.12,
-    emissive: ORBIT_SHOP_BUTTON_FACE_COLOR,
-    emissiveIntensity: 0.42,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_FACE_OPACITY, 0, 1),
-    depthWrite: false,
-  });
-  const edgeMaterial = new THREE.MeshPhysicalMaterial({
-    name: 'Shop / soft ice-blue 3D beveled edge',
-    color: ORBIT_SHOP_BUTTON_EDGE_COLOR,
-    metalness: 0.04,
-    roughness: 0.25,
-    clearcoat: 0.9,
-    clearcoatRoughness: 0.11,
-    emissive: ORBIT_SHOP_BUTTON_EDGE_COLOR,
-    emissiveIntensity: 0.2,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: THREE.MathUtils.clamp(ORBIT_SHOP_BUTTON_EDGE_OPACITY, 0, 1),
-    depthWrite: false, // Transparent edges must not punch holes in the ring/heart.
-  });
-  const body = new THREE.Mesh(bodyGeometry, [bodyMaterial, edgeMaterial]);
-  body.name = 'OrbitShopButton_SolidBeveledBody';
-  body.renderOrder = 18; // Draw above the front ring so the tube stays UNDER the pill.
-  body.castShadow = false;
-  body.receiveShadow = false;
-  orbitGroup.add(body);
+    // Draw the luminous halo on the transparent lettering texture itself.
+    // A separate material keeps the text legible when the body/edge are glassy.
+    if (ORBIT_SHOP_TEXT_GLOW_ENABLED && ORBIT_SHOP_TEXT_GLOW_BLUR > 0) {
+      ctx.save();
+      ctx.shadowColor = ORBIT_SHOP_TEXT_GLOW_COLOR;
+      ctx.shadowBlur = Math.max(0, ORBIT_SHOP_TEXT_GLOW_BLUR);
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.strokeStyle = ORBIT_SHOP_TEXT_GLOW_COLOR;
+      ctx.lineWidth = outlineWidth + 3;
+      ctx.globalAlpha = 0.65;
+      // A second pass strengthens the soft light, rather than enlarging the text.
+      for (let pass = 0; pass < 2; pass += 1) {
+        ctx.strokeText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
+      }
+      ctx.restore();
+    }
 
-  // A custom text canvas becomes a material map on a true 3D front plane.
-  // The texture has NO solid background; the bevelled body provides it.
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) { ring.remove(orbitGroup); return null; }
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // Always honor the top-of-file font weight, even after fitting long text.
-  const fontWeight = Math.max(100, Math.min(900, ORBIT_SHOP_TEXT_WEIGHT));
-  const textFont = (px) => `${fontWeight} ${px}px "Inconsolata", ui-monospace, monospace`;
-  ctx.font = textFont(84);
-  // Fit text inside the curved 3D face without changing button geometry.
-  const maxTextWidth = canvas.width * 0.87;
-  const measuredWidth = ctx.measureText(ORBIT_SHOP_BUTTON_TEXT).width;
-  if (measuredWidth > maxTextWidth) {
-    ctx.font = textFont(Math.max(48, Math.floor(84 * maxTextWidth / measuredWidth)));
-  }
-  const textX = canvas.width / 2;
-  const textY = canvas.height / 2;
-  const outlineWidth = Math.max(0, ORBIT_SHOP_TEXT_OUTLINE_WIDTH);
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  // Draw the luminous halo on the transparent lettering texture itself.
-  // A separate material keeps the text legible when the body/edge are glassy.
-  if (ORBIT_SHOP_TEXT_GLOW_ENABLED && ORBIT_SHOP_TEXT_GLOW_BLUR > 0) {
-    ctx.save();
-    ctx.shadowColor = ORBIT_SHOP_TEXT_GLOW_COLOR;
-    ctx.shadowBlur = Math.max(0, ORBIT_SHOP_TEXT_GLOW_BLUR);
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = ORBIT_SHOP_TEXT_GLOW_COLOR;
-    ctx.lineWidth = outlineWidth + 3;
-    ctx.globalAlpha = 0.65;
-    // A second pass strengthens the soft light, rather than enlarging the text.
-    for (let pass = 0; pass < 2; pass += 1) {
+    // Dark purple outline + white core: crisp, thicker, and easily readable.
+    // The text colors are independent of the 3D glass face and its opacity.
+    if (outlineWidth > 0) {
+      ctx.lineWidth = outlineWidth;
+      ctx.strokeStyle = ORBIT_SHOP_TEXT_COLOR;
       ctx.strokeText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
     }
-    ctx.restore();
-  }
+    ctx.fillStyle = ORBIT_SHOP_BUTTON_TEXT_COLOR;
+    ctx.fillText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
+    const textMap = new THREE.CanvasTexture(canvas);
+    textMap.colorSpace = THREE.SRGBColorSpace;
+    textMap.anisotropy = 4;
+    const textMaterial = new THREE.MeshBasicMaterial({
+      name: `Shop star ${index + 1} / lettering`,
+      map: textMap,
+      transparent: true,
+      alphaTest: 0.004, // Don't discard the soft lavender glow's low-alpha pixels.
+      depthWrite: false,
+      depthTest: true,
+      toneMapped: false,
+      // Never render the reverse of the letters through the back of the plane.
+      // A separate outward-facing text surface is created for the other side.
+      side: THREE.FrontSide,
+    });
+    const textMesh = new THREE.Mesh(
+      wrapToOrbit(new THREE.PlaneGeometry(w * 0.78, h * 0.27, 36, 2)
+        .translate(0, 0, faceZ + 0.013)),
+      textMaterial,
+    );
+    textMesh.name = `OrbitShopStarText_${index + 1}`;
+    textMesh.renderOrder = 22;
+    textMesh.raycast = () => {};
+    orbitGroup.add(textMesh);
 
-  // Dark purple outline + white core: crisp, thicker, and easily readable.
-  // The text colors are independent of the 3D glass face and its opacity.
-  if (outlineWidth > 0) {
-    ctx.lineWidth = outlineWidth;
-    ctx.strokeStyle = ORBIT_SHOP_TEXT_COLOR;
-    ctx.strokeText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
-  }
-  ctx.fillStyle = ORBIT_SHOP_BUTTON_TEXT_COLOR;
-  ctx.fillText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
-  const textMap = new THREE.CanvasTexture(canvas);
-  textMap.colorSpace = THREE.SRGBColorSpace;
-  textMap.anisotropy = 4;
-  const textMaterial = new THREE.MeshBasicMaterial({
-    name: 'Shop / crisp lettering on 3D face',
-    map: textMap,
-    transparent: true,
-    alphaTest: 0.004, // Don't discard the soft lavender glow's low-alpha pixels.
-    depthWrite: false,
-    depthTest: true,
-    toneMapped: false,
-    side: THREE.DoubleSide,
-  });
-  const textMesh = new THREE.Mesh(wrapToOrbit(new THREE.PlaneGeometry(w * 0.98, h * 0.93, 36, 2).translate(0, 0, faceZ + 0.013)), textMaterial);
-  textMesh.name = 'OrbitShopButton_Lettering';
-  textMesh.renderOrder = 22;
-  textMesh.raycast = () => {};
-  orbitGroup.add(textMesh);
+    // OUTSIDE-FACING SHOP LETTERING. The second star can expose its rear
+    // surface as the ring travels. Rendering a DoubleSide text plane there
+    // reverses the letters. Instead give each star a real back face: rotate
+    // the plane by 180 degrees (so it reads normally from outside), and put
+    // it just beyond the rear bevel. Only the camera-facing text is rendered.
+    const outsideTextGeometry = new THREE.PlaneGeometry(
+      w * 0.78, h * 0.27, 36, 2,
+    );
+    outsideTextGeometry.rotateY(Math.PI);
+    outsideTextGeometry.translate(0, 0, -faceZ - 0.013);
+    wrapToOrbit(outsideTextGeometry);
+    const outsideTextMesh = new THREE.Mesh(outsideTextGeometry, textMaterial);
+    outsideTextMesh.name = `OrbitShopStarOutsideText_${index + 1}`;
+    outsideTextMesh.renderOrder = 22;
+    outsideTextMesh.raycast = () => {};
+    orbitGroup.add(outsideTextMesh);
 
-  // A translucent rounded frontal enamel coat catches reflections with
-  // geometry and material response (not an HTML border or CSS gradient).
-  const faceMaterial = new THREE.MeshPhysicalMaterial({
-    name: 'Shop / translucent pearly glass face',
-    color: '#f4fcff',
-    metalness: 0.0,
-    roughness: 0.2,
-    clearcoat: 1,
-    clearcoatRoughness: 0.09,
-    transparent: true,
-    opacity: 0.12,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const enamel = new THREE.Mesh(wrapToOrbit(new THREE.ShapeGeometry(
-    pillShape(w * 0.95, h * 0.84, h * 0.39),
-  ).translate(0, 0, faceZ + 0.005)), faceMaterial);
-  enamel.name = 'OrbitShopButton_PearlyGlassFace';
-  enamel.renderOrder = 19;
-  enamel.raycast = () => {};
-  orbitGroup.add(enamel);
+    // A translucent rounded-star enamel coat catches reflections with
+    // geometry and material response (not an HTML border or CSS gradient).
+    const faceMaterial = new THREE.MeshPhysicalMaterial({
+      name: 'Shop / translucent pearly glass face',
+      color: '#f4fcff',
+      metalness: 0.0,
+      roughness: 0.2,
+      clearcoat: 1,
+      clearcoatRoughness: 0.09,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const enamel = new THREE.Mesh(wrapToOrbit(new THREE.ShapeGeometry(
+      roundedStarShape(w * 0.89, h * 0.89),
+    ).translate(0, 0, faceZ + 0.005)), faceMaterial);
+    enamel.name = `OrbitShopStarEnamel_${index + 1}`;
+    enamel.renderOrder = 19;
+    enamel.raycast = () => {};
+    orbitGroup.add(enamel);
 
-  // The original pastel 2D pill had an airy, light-catching presence. Keep
-  // that aesthetic with a real animated reflection on the CURVED 3D surface,
-  // rather than a camera-aligned HTML overlay or constantly rotating billboard.
-  const sweepGeometry = new THREE.ShapeGeometry(pillShape(w * 0.93, h * 0.78, h * 0.35));
-  const sweepUv = sweepGeometry.getAttribute('uv');
-  const sweepPosition = sweepGeometry.getAttribute('position');
-  for (let i = 0; i < sweepUv.count; i++) {
-    sweepUv.setXY(i, sweepPosition.getX(i) / w + 0.5,
-      sweepPosition.getY(i) / h + 0.5);
-  }
-  sweepUv.needsUpdate = true;
-  sweepGeometry.translate(0, 0, faceZ + 0.009);
-  wrapToOrbit(sweepGeometry);
-  const sweepMaterial = new THREE.ShaderMaterial({
-    name: 'Shop / animated pastel glass reflection',
-    transparent: true,
-    blending: THREE.NormalBlending,
-    depthTest: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      uTime: { value: 0 },
-      uSpeed: { value: ORBIT_SHOP_BUTTON_SHIMMER_SPEED },
-      uStrength: { value: ORBIT_SHOP_BUTTON_SHIMMER_ENABLED ? ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH : 0 },
-      uOcclusionCenter: { value: new THREE.Vector3() },
-      uOcclusionCamera: { value: new THREE.Vector3() },
-      uOcclusionRadius: { value: worldRadius },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      varying vec3 vWorldPosition;
-      void main() {
-        vUv = uv;
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      varying vec3 vWorldPosition;
-      uniform float uTime, uSpeed, uStrength, uOcclusionRadius;
-      uniform vec3 uOcclusionCenter, uOcclusionCamera;
-      void main() {
-        // Transparent sphere does not write depth, so clip the reflection too.
-        vec3 ray = vWorldPosition - uOcclusionCamera;
-        float distanceToPixel = length(ray);
-        vec3 dir = ray / max(distanceToPixel, 0.00001);
-        vec3 toSphere = uOcclusionCenter - uOcclusionCamera;
-        float along = dot(toSphere, dir);
-        float disc = along * along - dot(toSphere, toSphere) + uOcclusionRadius * uOcclusionRadius;
-        if (disc > 0.0) {
-          float nearD = along - sqrt(disc);
-          if (nearD > 0.0 && distanceToPixel > nearD + 0.015) discard;
-        }
-        // Smooth seamless periodic sweep from left to right with soft edges.
-        float phase = fract(uTime * uSpeed);
-        float center = phase * 1.6 - 0.3;
-        float blade = exp(-pow((vUv.x - center) / 0.092, 2.0));
-        float vertical = 0.58 + 0.42 * smoothstep(0.0, 1.0, vUv.y);
-        float fade = smoothstep(0.0, 0.12, vUv.x) * (1.0 - smoothstep(0.88, 1.0, vUv.x));
-        float alpha = clamp(blade * vertical * fade * uStrength, 0.0, 0.65);
-        if (alpha < 0.001) discard;
-        gl_FragColor = vec4(0.93, 0.99, 1.0, alpha);
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const sweepMesh = new THREE.Mesh(sweepGeometry, sweepMaterial);
-  sweepMesh.name = 'OrbitShopButton_AnimatedSheen';
-  sweepMesh.renderOrder = 20;
-  sweepMesh.raycast = () => {};
-  orbitGroup.add(sweepMesh);
-
-  // Explicit sphere occlusion, PER FRAGMENT. The existing sphere material
-  // is transparent with depthWrite:false, so ordinary depthTest alone does
-  // NOT hide an object on its far side. Mask against its world-space surface.
-  const occlusionCenter = globeCenter.clone();
-  const occlusionCamera = new THREE.Vector3();
-  const occlusionRadius = { value: worldRadius };
-  const patchOcclusion = (material) => {
-    material.onBeforeCompile = (shader) => {
-      shader.uniforms.uShopSphereCenter = { value: occlusionCenter };
-      shader.uniforms.uShopCamera = { value: occlusionCamera };
-      shader.uniforms.uShopSphereRadius = occlusionRadius;
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <common>', '#include <common>\nvarying vec3 vShopWorldPosition;');
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <project_vertex>',
-        '#include <project_vertex>\nvShopWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <common>',
-        `#include <common>
-         varying vec3 vShopWorldPosition;
-         uniform vec3 uShopSphereCenter;
-         uniform vec3 uShopCamera;
-         uniform float uShopSphereRadius;`);
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <clipping_planes_fragment>',
-        `#include <clipping_planes_fragment>
-         vec3 shopRay = vShopWorldPosition - uShopCamera;
-         float shopDistance = length(shopRay);
-         vec3 shopDirection = shopRay / max(shopDistance, 0.00001);
-         vec3 shopCenterVector = uShopSphereCenter - uShopCamera;
-         float shopAlong = dot(shopCenterVector, shopDirection);
-         float shopDiscriminant = shopAlong * shopAlong
-           - dot(shopCenterVector, shopCenterVector)
-           + uShopSphereRadius * uShopSphereRadius;
-         if (shopDiscriminant > 0.0) {
-           float shopNear = shopAlong - sqrt(shopDiscriminant);
-           if (shopNear > 0.0 && shopDistance > shopNear + 0.015) discard;
-         }`);
-    };
-    material.customProgramCacheKey = () => 'shop-sphere-clip-v1';
-    material.needsUpdate = true;
-  };
-  for (const material of [bodyMaterial, edgeMaterial, textMaterial, faceMaterial]) patchOcclusion(material);
-
-  // The raycaster must honor the SAME occlusion as the fragment shader:
-  // invisible backside geometry cannot create a ghost clicking area.
-  const originalRaycast = body.raycast.bind(body);
-  body.raycast = (raycaster, intersects) => {
-    const hits = [];
-    originalRaycast(raycaster, hits);
-    for (const hit of hits) {
-      const ray = hit.point.clone().sub(raycaster.ray.origin);
-      const distance = ray.length();
-      ray.divideScalar(Math.max(distance, 0.00001));
-      const toCenter = occlusionCenter.clone().sub(raycaster.ray.origin);
-      const along = toCenter.dot(ray);
-      const disc = along * along - toCenter.lengthSq() + occlusionRadius.value ** 2;
-      if (disc > 0 && along - Math.sqrt(disc) > 0 &&
-          distance > along - Math.sqrt(disc) + 0.015) continue;
-      intersects.push(hit);
+    // The original pastel 2D star has an airy, light-catching presence. Keep
+    // that aesthetic with a real animated reflection on the CURVED 3D surface,
+    // rather than a camera-aligned HTML overlay or constantly rotating billboard.
+    const sweepGeometry = new THREE.ShapeGeometry(roundedStarShape(w * 0.91, h * 0.91));
+    const sweepUv = sweepGeometry.getAttribute('uv');
+    const sweepPosition = sweepGeometry.getAttribute('position');
+    for (let i = 0; i < sweepUv.count; i++) {
+      sweepUv.setXY(i, sweepPosition.getX(i) / w + 0.5,
+        sweepPosition.getY(i) / h + 0.5);
     }
-  };
+    sweepUv.needsUpdate = true;
+    sweepGeometry.translate(0, 0, faceZ + 0.009);
+    wrapToOrbit(sweepGeometry);
+    const sweepMaterial = new THREE.ShaderMaterial({
+      name: 'Shop / animated pastel glass reflection',
+      transparent: true,
+      blending: THREE.NormalBlending,
+      depthTest: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uTime: { value: 0 },
+        uSpeed: { value: ORBIT_SHOP_BUTTON_SHIMMER_SPEED },
+        uStrength: { value: ORBIT_SHOP_BUTTON_SHIMMER_ENABLED ? ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH : 0 },
+        uOcclusionCenter: { value: new THREE.Vector3() },
+        uOcclusionCamera: { value: new THREE.Vector3() },
+        uOcclusionRadius: { value: worldRadius },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+        void main() {
+          vUv = uv;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+        uniform float uTime, uSpeed, uStrength, uOcclusionRadius;
+        uniform vec3 uOcclusionCenter, uOcclusionCamera;
+        void main() {
+          // Transparent sphere does not write depth, so clip the reflection too.
+          vec3 ray = vWorldPosition - uOcclusionCamera;
+          float distanceToPixel = length(ray);
+          vec3 dir = ray / max(distanceToPixel, 0.00001);
+          vec3 toSphere = uOcclusionCenter - uOcclusionCamera;
+          float along = dot(toSphere, dir);
+          float disc = along * along - dot(toSphere, toSphere) + uOcclusionRadius * uOcclusionRadius;
+          if (disc > 0.0) {
+            float nearD = along - sqrt(disc);
+            if (nearD > 0.0 && distanceToPixel > nearD + 0.015) discard;
+          }
+          // Smooth seamless periodic sweep from left to right with soft edges.
+          float phase = fract(uTime * uSpeed);
+          float center = phase * 1.6 - 0.3;
+          float blade = exp(-pow((vUv.x - center) / 0.092, 2.0));
+          float vertical = 0.58 + 0.42 * smoothstep(0.0, 1.0, vUv.y);
+          float fade = smoothstep(0.0, 0.12, vUv.x) * (1.0 - smoothstep(0.88, 1.0, vUv.x));
+          float alpha = clamp(blade * vertical * fade * uStrength, 0.0, 0.65);
+          if (alpha < 0.001) discard;
+          gl_FragColor = vec4(0.93, 0.99, 1.0, alpha);
+          #include <colorspace_fragment>
+        }
+      `,
+    });
+    const sweepMesh = new THREE.Mesh(sweepGeometry, sweepMaterial);
+    sweepMesh.name = `OrbitShopStarSheen_${index + 1}`;
+    sweepMesh.renderOrder = 20;
+    sweepMesh.raycast = () => {};
+    orbitGroup.add(sweepMesh);
+
+    // Explicit sphere occlusion, PER FRAGMENT. The existing sphere material
+    // is transparent with depthWrite:false, so ordinary depthTest alone does
+    // NOT hide an object on its far side. Mask against its world-space surface.
+    const occlusionCenter = globeCenter.clone();
+    const occlusionCamera = new THREE.Vector3();
+    const occlusionRadius = { value: worldRadius };
+    const patchOcclusion = (material) => {
+      material.onBeforeCompile = (shader) => {
+        shader.uniforms.uShopSphereCenter = { value: occlusionCenter };
+        shader.uniforms.uShopCamera = { value: occlusionCamera };
+        shader.uniforms.uShopSphereRadius = occlusionRadius;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <common>', '#include <common>\nvarying vec3 vShopWorldPosition;');
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <project_vertex>',
+          '#include <project_vertex>\nvShopWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <common>',
+          `#include <common>
+           varying vec3 vShopWorldPosition;
+           uniform vec3 uShopSphereCenter;
+           uniform vec3 uShopCamera;
+           uniform float uShopSphereRadius;`);
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <clipping_planes_fragment>',
+          `#include <clipping_planes_fragment>
+           vec3 shopRay = vShopWorldPosition - uShopCamera;
+           float shopDistance = length(shopRay);
+           vec3 shopDirection = shopRay / max(shopDistance, 0.00001);
+           vec3 shopCenterVector = uShopSphereCenter - uShopCamera;
+           float shopAlong = dot(shopCenterVector, shopDirection);
+           float shopDiscriminant = shopAlong * shopAlong
+             - dot(shopCenterVector, shopCenterVector)
+             + uShopSphereRadius * uShopSphereRadius;
+           if (shopDiscriminant > 0.0) {
+             float shopNear = shopAlong - sqrt(shopDiscriminant);
+             if (shopNear > 0.0 && shopDistance > shopNear + 0.015) discard;
+           }`);
+      };
+      material.customProgramCacheKey = () => 'shop-sphere-clip-v1';
+      material.needsUpdate = true;
+    };
+    for (const material of [bodyMaterial, edgeMaterial, textMaterial, faceMaterial]) patchOcclusion(material);
+
+    // The raycaster must honor the SAME occlusion as the fragment shader:
+    // invisible backside geometry cannot create a ghost clicking area.
+    const originalRaycast = body.raycast.bind(body);
+    body.raycast = (raycaster, intersects) => {
+      const hits = [];
+      originalRaycast(raycaster, hits);
+      for (const hit of hits) {
+        const ray = hit.point.clone().sub(raycaster.ray.origin);
+        const distance = ray.length();
+        ray.divideScalar(Math.max(distance, 0.00001));
+        const toCenter = occlusionCenter.clone().sub(raycaster.ray.origin);
+        const along = toCenter.dot(ray);
+        const disc = along * along - toCenter.lengthSq() + occlusionRadius.value ** 2;
+        if (disc > 0 && along - Math.sqrt(disc) > 0 &&
+            distance > along - Math.sqrt(disc) + 0.015) continue;
+        intersects.push(hit);
+      }
+    };
+
+
+    return {
+      group: orbitGroup,
+      body,
+      bodyMaterial,
+      edgeMaterial,
+      textMaterial,
+      sweepMaterial,
+      occlusionCenter,
+      occlusionCamera,
+      occlusionRadius,
+      hovered: false,
+      hoverBlend: 0,
+    };
+  }
+
+  // Both buttons are true ring children, separated by exactly 180 degrees.
+  // Keep the original group name for the existing click-detection code.
+  const buttons = [];
+  for (let i = 0; i < ORBIT_SHOP_BUTTON_COUNT; i += 1) {
+    const angle = bestAngle + i * ORBIT_SHOP_BUTTON_MIRROR_OFFSET;
+    const button = buildStarButton(angle, i);
+    if (button) buttons.push(button);
+  }
+  if (!buttons.length) {
+    ring.remove(orbitRoot);
+    return null;
+  }
 
   const worldSize = new THREE.Vector3();
-  let hovered = false;
-  let hoverBlend = 0;
   return {
-    // Real 3D ray test respects the same sphere mask used during rendering.
+    // Each visible star has independent hover feedback.
     setHover(raycaster) {
-      hovered = Boolean(raycaster && raycaster.intersectObject(body, false).length);
-      return hovered;
+      let anyHovered = false;
+      for (const item of buttons) {
+        item.hovered = Boolean(
+          raycaster && raycaster.intersectObject(item.body, false).length
+        );
+        anyHovered ||= item.hovered;
+      }
+      return anyHovered;
     },
     update(seconds = 0, dt = 0, animate = true) {
       globe.updateWorldMatrix(true, false);
-      occlusionCenter.copy(globe.geometry.boundingSphere.center).applyMatrix4(globe.matrixWorld);
       globe.getWorldScale(worldSize);
-      occlusionRadius.value = globeRadius * Math.max(worldSize.x, worldSize.y, worldSize.z)
+      const radius = globeRadius * Math.max(worldSize.x, worldSize.y, worldSize.z)
         * (1 + (SHELL_HOLO_ENABLED ? SHELL_HOLO_GAP : 0));
-      occlusionCamera.copy(camera.position);
       const phase = animate ? seconds : 0;
       const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2 *
         Math.max(0, ORBIT_SHOP_BUTTON_GLOW_PULSE_SPEED));
       const breathing = (pulse - 0.5) * 2 * ORBIT_SHOP_BUTTON_GLOW_PULSE_AMOUNT;
-      hoverBlend = THREE.MathUtils.damp(hoverBlend, hovered ? 1 : 0, 8, Math.max(0, dt));
-      const boost = ORBIT_SHOP_BUTTON_HOVER_BRIGHTNESS * hoverBlend;
-      // Preserve independent opacity sliders and crisp text while breathing.
-      bodyMaterial.opacity = THREE.MathUtils.clamp(
-        ORBIT_SHOP_BUTTON_FACE_OPACITY * (1 + breathing * 0.24 + boost * 0.25), 0, 1);
-      edgeMaterial.opacity = THREE.MathUtils.clamp(
-        ORBIT_SHOP_BUTTON_EDGE_OPACITY * (1 + breathing * 0.28 + boost * 0.38), 0, 1);
-      bodyMaterial.emissiveIntensity = 0.42 * (1 + breathing + boost);
-      edgeMaterial.emissiveIntensity = 0.20 * (1 + breathing * 1.3 + boost * 1.5);
-      textMaterial.opacity = THREE.MathUtils.clamp(0.90 + 0.10 * pulse + boost * 0.3, 0, 1);
-      sweepMaterial.uniforms.uTime.value = phase;
-      sweepMaterial.uniforms.uStrength.value = ORBIT_SHOP_BUTTON_SHIMMER_ENABLED && animate
-        ? Math.max(0, ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH) * (1 + boost) : 0;
-      sweepMaterial.uniforms.uOcclusionCenter.value.copy(occlusionCenter);
-      sweepMaterial.uniforms.uOcclusionCamera.value.copy(occlusionCamera);
-      sweepMaterial.uniforms.uOcclusionRadius.value = occlusionRadius.value;
-      // The curved mesh is in torus-local space: the 0.4x orbit animates it.
+      for (const item of buttons) {
+        item.occlusionCenter.copy(globe.geometry.boundingSphere.center)
+          .applyMatrix4(globe.matrixWorld);
+        item.occlusionRadius.value = radius;
+        item.occlusionCamera.copy(camera.position);
+        item.hoverBlend = THREE.MathUtils.damp(
+          item.hoverBlend, item.hovered ? 1 : 0, 8, Math.max(0, dt));
+        const boost = ORBIT_SHOP_BUTTON_HOVER_BRIGHTNESS * item.hoverBlend;
+        item.bodyMaterial.opacity = THREE.MathUtils.clamp(
+          ORBIT_SHOP_BUTTON_FACE_OPACITY * (1 + breathing * 0.24 + boost * 0.25), 0, 1);
+        item.edgeMaterial.opacity = THREE.MathUtils.clamp(
+          ORBIT_SHOP_BUTTON_EDGE_OPACITY * (1 + breathing * 0.28 + boost * 0.38), 0, 1);
+        item.bodyMaterial.emissiveIntensity = 0.42 * (1 + breathing + boost);
+        item.edgeMaterial.emissiveIntensity = 0.20 * (1 + breathing * 1.3 + boost * 1.5);
+        item.textMaterial.opacity = THREE.MathUtils.clamp(0.90 + 0.10 * pulse + boost * 0.3, 0, 1);
+        item.sweepMaterial.uniforms.uTime.value = phase;
+        item.sweepMaterial.uniforms.uStrength.value = ORBIT_SHOP_BUTTON_SHIMMER_ENABLED && animate
+          ? Math.max(0, ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH) * (1 + boost) : 0;
+        item.sweepMaterial.uniforms.uOcclusionCenter.value.copy(item.occlusionCenter);
+        item.sweepMaterial.uniforms.uOcclusionCamera.value.copy(item.occlusionCamera);
+        item.sweepMaterial.uniforms.uOcclusionRadius.value = item.occlusionRadius.value;
+      }
+      // Each 3D star inherits the torus animation without any extra movement.
     },
   };
 }
-
 let modelBytes;
 function loadModelBytes() {
   if (!modelBytes) {
@@ -1615,8 +1689,8 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
       // The 0.4x orbit is baked into the GLB. Do not slow the mixer again.
       mixer.setTime(0);
       if (viewport && href && ORBIT_SHOP_BUTTON_ENABLED) {
-        // Create the ring-wrapped 3D capsule: its tangent, curved surface and
-        // minimal tube clearance are all measured from the GLB torus geometry.
+        // Build two ring-wrapped rounded stars at opposite torus angles.
+        // Both follow the original GLB's baked orbit and keep independent hover.
         const ring = model.getObjectByName('Torus');
         orbitShopMesh = createOrbitShopMesh(ring, globe, camera);
         orbitShopMesh?.update(0, 0, false);
@@ -1668,8 +1742,7 @@ export default function CorePlanet({ viewport = false, href, onBackgroundClick }
     role={href ? undefined : 'group'} tabIndex={href ? undefined : 0}
     aria-label={href ? undefined : 'Heart planet. Drag or use arrow keys to rotate the view.'}>
     {viewport && href && ORBIT_SHOP_BUTTON_ENABLED && (
-      // Hide the OLD label; the new button lives entirely inside the WebGL
-      // scene as solid geometry attached directly to the orbit ring.
+      // Hide the OLD label; two 3D rounded stars now attach directly to the ring.
       <style>{`.${styles.interactionHint} { display: none !important; }`}</style>
     )}
     {failed && <img className={styles.fallback} src="/images/coreplanet-heart.png" alt="Pink heart planet" />}
