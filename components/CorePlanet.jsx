@@ -25,8 +25,8 @@ const GAME_GLOBE_COMPACT_SIZE = 48;
 // Each star follows the ring and disappears when hidden behind the planet.
 // Colors, glow, transparency and animated reflections are independently preserved.
 const ORBIT_SHOP_BUTTON_ENABLED = true;
-const ORBIT_SHOP_BUTTON_TEXT = 'SHOP';
-const ORBIT_SHOP_BUTTON_SIZE = 1.6;           // 0.7 compact; 1 normal; 1.4 large
+const ORBIT_SHOP_BUTTON_TEXT = '🛒'; // Unicode shopping bag; no PNG or SVG needed
+const ORBIT_SHOP_BUTTON_SIZE = 1.4;           // 0.7 compact; 1 normal; 1.4 large
 const ORBIT_SHOP_BUTTON_POSITION = -0.48;     // Where on the visible ring to start (screen Y)
 const ORBIT_SHOP_BUTTON_WIDTH = 1.46;         // Rounded-star width in 3D world units
 const ORBIT_SHOP_BUTTON_HEIGHT = 1.46;        // Rounded-star height in 3D world units
@@ -37,31 +37,31 @@ const ORBIT_SHOP_BUTTON_RING_GAP = 0.035;     // Small separation from ring surf
 const ORBIT_SHOP_BUTTON_LIFT = 0.10;         // Gentle visual lift above the ring, in local 3D units
 // Pale ice-blue and purple are the colors of the original 2D shop pill.
 const ORBIT_SHOP_BUTTON_FACE_COLOR = '#e2f5ff';
-const ORBIT_SHOP_BUTTON_FACE_OPACITY = 0.90; // 0 invisible; 1 fully solid
+const ORBIT_SHOP_BUTTON_FACE_OPACITY = 0.40; // 0 invisible; 1 fully solid
 const ORBIT_SHOP_BUTTON_EDGE_COLOR = '#b4f3fc';
-const ORBIT_SHOP_BUTTON_EDGE_OPACITY = 0.40; // Independent translucent 3D bevel/side opacity (0–1)
+const ORBIT_SHOP_BUTTON_EDGE_OPACITY = 0.30; // Independent translucent 3D bevel/side opacity (0–1)
 const ORBIT_SHOP_BUTTON_TEXT_COLOR = '#ffffff'; // Crisp center of the letters
 
 // Text is drawn onto its own transparent canvas, independently of face/edge alpha.
 const ORBIT_SHOP_TEXT_COLOR = '#74488f'; // Dark purple outline for contrast
-const ORBIT_SHOP_TEXT_WEIGHT = 800; // Font weight; 400 normal, 700 bold, 900 extra bold
+const ORBIT_SHOP_TEXT_WEIGHT = 900; // Font weight; 400 normal, 700 bold, 900 extra bold
 const ORBIT_SHOP_TEXT_OUTLINE_WIDTH = 6; // Canvas pixels; adds real apparent thickness
 const ORBIT_SHOP_TEXT_GLOW_COLOR = '#c594ff';
 const ORBIT_SHOP_TEXT_GLOW_BLUR = 20; // Canvas pixels; 0 means no blur
 const ORBIT_SHOP_TEXT_GLOW_ENABLED = true;
 // Restored 2D-style visual energy, now on the actual moving 3D mesh.
-const ORBIT_SHOP_BUTTON_GLOW_PULSE_SPEED = 0.85; // Breathing cycles per second
-const ORBIT_SHOP_BUTTON_GLOW_PULSE_AMOUNT = 0.23; // 0 = static, 0.5 = dramatic
+const ORBIT_SHOP_BUTTON_GLOW_PULSE_SPEED = 0.55; // Breathing cycles per second
+const ORBIT_SHOP_BUTTON_GLOW_PULSE_AMOUNT = 0.5; // 0 = static, 0.5 = dramatic
 const ORBIT_SHOP_BUTTON_SHIMMER_ENABLED = true;
-const ORBIT_SHOP_BUTTON_SHIMMER_SPEED = 0.42; // Repeating reflections per second
+const ORBIT_SHOP_BUTTON_SHIMMER_SPEED = 0.82; // Repeating reflections per second
 const ORBIT_SHOP_BUTTON_SHIMMER_STRENGTH = 0.30;
-const ORBIT_SHOP_BUTTON_HOVER_BRIGHTNESS = 0.38;
+const ORBIT_SHOP_BUTTON_HOVER_BRIGHTNESS = 0.9; // 0 = no change, 1 = full white, 0.5 = subtle
 const ORBIT_SHOP_BUTTON_START_X = 0.0; // 0 = screen center; -0.5 left; +0.5 right
 const ORBIT_SHOP_BUTTON_COUNT = 2;           // Two separate, clickable star meshes
 const ORBIT_SHOP_BUTTON_MIRROR_OFFSET = Math.PI; // Opposite around the torus (180 degrees)
-const ORBIT_SHOP_BUTTON_STAR_POINTS = 4;     // 4 = rounded sparkle-star silhouette
+const ORBIT_SHOP_BUTTON_STAR_POINTS = 5;     // 4 = rounded sparkle-star silhouette
 const ORBIT_SHOP_BUTTON_STAR_INNER_RATIO = 0.58; // Smaller = deeper star valleys
-const ORBIT_SHOP_BUTTON_STAR_ROUNDNESS = 0.20;  // 0 sharp, 0.2 soft, 0.3 very round
+const ORBIT_SHOP_BUTTON_STAR_ROUNDNESS = 0.30;  // 0 sharp, 0.2 soft, 0.3 very round
 // =====================================================================
 
 // ===== SPARKLE SETTINGS (EDIT THESE ONLY) ==============================
@@ -1068,7 +1068,7 @@ function createOrbitShopMesh(ring, globe, camera) {
     // Always honor the top-of-file font weight, even after fitting long text.
     const fontWeight = Math.max(100, Math.min(900, ORBIT_SHOP_TEXT_WEIGHT));
     const textFont = (px) => `${fontWeight} ${px}px "Inconsolata", ui-monospace, monospace`;
-    ctx.font = textFont(116);
+    ctx.font = textFont(260);
     // Fit text inside the curved 3D face without changing button geometry.
     const maxTextWidth = canvas.width * 0.87;
     const measuredWidth = ctx.measureText(ORBIT_SHOP_BUTTON_TEXT).width;
