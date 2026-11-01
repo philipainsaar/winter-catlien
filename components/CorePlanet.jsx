@@ -74,7 +74,10 @@ const ORBIT_TAP_TEXT_WIDTH = 2.75;        // Width in 3D units before button sca
 const ORBIT_TAP_TEXT_HEIGHT = 0.76;       // Height in 3D units before button scale
 const ORBIT_TAP_TEXT_LIFT = 0.03;         // Keep the labels close to the ring
 const ORBIT_TAP_TEXT_OUTSIDE_GAP = 0.26;  // Small radial outward offset (0 = earlier position)
-const ORBIT_TAP_TEXT_FONT_SIZE = 184;     // Font pixels in the transparent texture
+const ORBIT_TAP_TEXT_FONT_SIZE = 184;     // Unchanged from the Minimal Fix
+const ORBIT_TAP_TEXT_DESKTOP_SIZE = 1.15;  // Text dimensions +15%, still wrapped onto ring
+const ORBIT_TAP_TEXT_MOBILE_SIZE = 1.40;   // Text dimensions +40%, still wrapped onto ring
+const ORBIT_TAP_TEXT_MOBILE_BREAKPOINT = 768; // Window width in CSS pixels
 const ORBIT_TAP_TEXT_COLOR = '#ffffff';  // Main letter fill
 const ORBIT_TAP_TEXT_OUTLINE = '#7c458f'; // Dark outline for contrast
 const ORBIT_TAP_TEXT_GLOW = '#e9a4ff';   // Soft lilac glow
@@ -1529,9 +1532,17 @@ function createOrbitShopMesh(ring, globe, camera) {
           side: THREE.FrontSide,
         }));
 
+        // IMPORTANT: keep Minimal Fix's real curved Three.js geometry.
+        // Size the letters by enlarging the source surface BEFORE bending it
+        // around the orbit. No camera-facing billboard or rotation overrides.
+        const mobileText = window.innerWidth <= ORBIT_TAP_TEXT_MOBILE_BREAKPOINT;
+        const tapTextSize = mobileText
+          ? ORBIT_TAP_TEXT_MOBILE_SIZE : ORBIT_TAP_TEXT_DESKTOP_SIZE;
         for (const back of [false, true]) {
           const geometry = new THREE.PlaneGeometry(
-            ORBIT_TAP_TEXT_WIDTH, ORBIT_TAP_TEXT_HEIGHT, 42, 2
+            ORBIT_TAP_TEXT_WIDTH * tapTextSize,
+            ORBIT_TAP_TEXT_HEIGHT * tapTextSize,
+            56, 2
           );
           if (back) geometry.rotateY(Math.PI);
           geometry.translate(0, 0, back ? -0.055 : 0.055);
