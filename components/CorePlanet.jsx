@@ -72,8 +72,8 @@ const ORBIT_TAP_TEXT_ENABLED = true;
 const ORBIT_TAP_TEXT = 'Tap here';
 const ORBIT_TAP_TEXT_WIDTH = 2.75;        // Width in 3D units before button scale
 const ORBIT_TAP_TEXT_HEIGHT = 0.76;       // Height in 3D units before button scale
-const ORBIT_TAP_TEXT_LIFT = 0.03;         // Retained for compatibility (labels now mount radially outside)
-const ORBIT_TAP_TEXT_OUTSIDE_GAP = 0.34;  // Additional distance outside Torus tube, before button scale
+const ORBIT_TAP_TEXT_LIFT = 0.03;         // Keep the labels close to the ring
+const ORBIT_TAP_TEXT_OUTSIDE_GAP = 0.26;  // Small radial outward offset (0 = earlier position)
 const ORBIT_TAP_TEXT_FONT_SIZE = 184;     // Font pixels in the transparent texture
 const ORBIT_TAP_TEXT_COLOR = '#ffffff';  // Main letter fill
 const ORBIT_TAP_TEXT_OUTLINE = '#7c458f'; // Dark outline for contrast
@@ -1452,37 +1452,73 @@ function createOrbitShopMesh(ring, globe, camera) {
         return material;
       }
 
-      // Mount each label OUTSIDE the circle, not on its camera-facing tube wall.
-      // Their positions remain genuine children of the animated Torus.
-      // Only their orientation is billboarded to the camera so both labels
-      // read left-to-right and right-side-up throughout orbital animation.
-      function buildTapLabel(theta, index) {
-        const orbitRadial = tube.axisU.clone()
-          .multiplyScalar(Math.cos(theta))
-          .addScaledVector(tube.axisV, Math.sin(theta))
-          .normalize();
-        const centerline = tube.center.clone()
-          .addScaledVector(orbitRadial, tube.radius);
-
-        // A flat text panel forms a chord of the torus. Account for that chord
-        // so even the ends of a large label stay OUTSIDE the ring silhouette.
-        const halfWidth = ORBIT_TAP_TEXT_WIDTH * scale * 0.5;
-        const safeHalfWidth = Math.min(halfWidth, tube.radius * 0.8);
-        const arcClearance = tube.radius - Math.sqrt(
-          Math.max(0, tube.radius * tube.radius - safeHalfWidth * safeHalfWidth)
+      function wrapTapAroundOrbit(geometry, frame, mount) {
+        const inward = frame.radial.clone().negate();
+        const inwardLocal = new THREE.Vector3(
+          0, inward.dot(frame.up), inward.dot(frame.forward)
         );
-        const outsideOffset = tube.tubeRadius + arcClearance
-          + ORBIT_TAP_TEXT_OUTSIDE_GAP * scale;
+        const bendAxis = new THREE.Vector3(1, 0, 0)
+          .cross(inwardLocal).normalize();
+        // Follow the same curved ring, just slightly outside its centerline.
+        const bendRadius = (tube.radius + ORBIT_TAP_TEXT_OUTSIDE_GAP * scale) / scale;
+        const mountLocal = mount / scale;
+        const liftLocal = ORBIT_TAP_TEXT_LIFT;
+        const section = new THREE.Vector3();
+        const attr = geometry.getAttribute('position');
+        for (let vertex = 0; vertex < attr.count; vertex += 1) {
+          const x = attr.getX(vertex);
+          const y = attr.getY(vertex);
+          const z = attr.getZ(vertex);
+          const angle = x / bendRadius;
+          const sag = bendRadius * (1 - Math.cos(angle));
+          section.set(0, y + liftLocal, z + mountLocal)
+            .applyAxisAngle(bendAxis, angle);
+          attr.setXYZ(vertex,
+            bendRadius * Math.sin(angle) + section.x,
+            inwardLocal.y * sag + section.y - liftLocal,
+            inwardLocal.z * sag + section.z - mountLocal,
+          );
+        }
+        attr.needsUpdate = true;
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        geometry.computeBoundingBox();
+        return geometry;
+      }
 
+      function buildTapLabel(theta, index) {
+        // Keep the same original torus attachment and camera-facing material.
+        const mountDistance = ringFrame(theta);
+        const frame = {
+          radial: radial.clone(),
+          up: up.clone(),
+          forward: forward.clone(),
+          tangent: tangent.clone(),
+        };
+        // The mirrored half of the ring could turn the texture upside down.
+        // Flip the entire local XY frame, preserving a proper front-facing plane.
+        const cameraUpLocal = new THREE.Vector3(0, 1, 0)
+          .applyQuaternion(camera.quaternion)
+          .transformDirection(ringInverse);
+        if (frame.up.dot(cameraUpLocal) < 0) {
+          frame.up.negate();
+          frame.tangent.negate();
+        }
         const label = new THREE.Group();
         label.name = `OrbitTapHereLabel_${index + 1}`;
-        label.position.copy(centerline)
-          .addScaledVector(orbitRadial, outsideOffset);
+        label.position.copy(anchor)
+          .addScaledVector(frame.forward, mountDistance)
+          // OUTSIDE the orbit circumference, not floating away from it.
+          .addScaledVector(frame.radial, ORBIT_TAP_TEXT_OUTSIDE_GAP * scale)
+          .addScaledVector(frame.up, ORBIT_TAP_TEXT_LIFT * scale);
+        label.quaternion.setFromRotationMatrix(
+          new THREE.Matrix4().makeBasis(frame.tangent, frame.up, frame.forward)
+        );
         label.scale.setScalar(scale);
         orbitRoot.add(label);
 
         const mat = patchTapOcclusion(new THREE.MeshBasicMaterial({
-          name: `Outside Tap Here lettering ${index + 1}`,
+          name: `Tap Here lettering ${index + 1}`,
           map: tapTexture,
           transparent: true,
           alphaTest: 0.004,
@@ -1490,41 +1526,43 @@ function createOrbitShopMesh(ring, globe, camera) {
           depthTest: true,
           depthWrite: false,
           toneMapped: false,
-          // No back-facing duplicate. Both labels are oriented toward the viewer.
           side: THREE.FrontSide,
         }));
 
-        const geometry = new THREE.PlaneGeometry(
-          ORBIT_TAP_TEXT_WIDTH, ORBIT_TAP_TEXT_HEIGHT, 24, 2
-        );
-        const mesh = new THREE.Mesh(geometry, mat);
-        mesh.name = `OrbitTapHereOutside_${index + 1}`;
-        mesh.renderOrder = 23;
-        mesh.frustumCulled = false;
-
-        // Match the shader's sphere occlusion when testing clicks.
-        // The plane is not allowed to create an invisible backside hit target.
-        const originalRaycast = mesh.raycast.bind(mesh);
-        mesh.raycast = (raycaster, hits) => {
-          const candidates = [];
-          originalRaycast(raycaster, candidates);
-          for (const hit of candidates) {
-            const ray = hit.point.clone().sub(raycaster.ray.origin);
-            const distance = ray.length();
-            ray.divideScalar(Math.max(distance, 0.00001));
-            const toSphere = tapOcclusionCenter.clone()
-              .sub(raycaster.ray.origin);
-            const along = toSphere.dot(ray);
-            const disc = along * along - toSphere.lengthSq()
-              + tapOcclusionRadius.value ** 2;
-            if (disc > 0) {
-              const near = along - Math.sqrt(disc);
-              if (near > 0 && distance > near + 0.015) continue;
+        for (const back of [false, true]) {
+          const geometry = new THREE.PlaneGeometry(
+            ORBIT_TAP_TEXT_WIDTH, ORBIT_TAP_TEXT_HEIGHT, 42, 2
+          );
+          if (back) geometry.rotateY(Math.PI);
+          geometry.translate(0, 0, back ? -0.055 : 0.055);
+          wrapTapAroundOrbit(geometry, frame, mountDistance);
+          const mesh = new THREE.Mesh(geometry, mat);
+          mesh.name = `OrbitTapHere${back ? 'Outside' : 'Front'}_${index + 1}`;
+          mesh.renderOrder = 23;
+          mesh.frustumCulled = false;
+          // Invisible far-side labels should not capture clicks.
+          const originalRaycast = mesh.raycast.bind(mesh);
+          mesh.raycast = (raycaster, hits) => {
+            const candidates = [];
+            originalRaycast(raycaster, candidates);
+            for (const hit of candidates) {
+              const ray = hit.point.clone().sub(raycaster.ray.origin);
+              const distance = ray.length();
+              ray.divideScalar(Math.max(distance, 0.00001));
+              const toSphere = tapOcclusionCenter.clone()
+                .sub(raycaster.ray.origin);
+              const along = toSphere.dot(ray);
+              const disc = along * along - toSphere.lengthSq()
+                + tapOcclusionRadius.value ** 2;
+              if (disc > 0) {
+                const near = along - Math.sqrt(disc);
+                if (near > 0 && distance > near + 0.015) continue;
+              }
+              hits.push(hit);
             }
-            hits.push(hit);
-          }
-        };
-        label.add(mesh);
+          };
+          label.add(mesh);
+        }
         return { group: label, material: mat };
       }
 
@@ -1539,18 +1577,6 @@ function createOrbitShopMesh(ring, globe, camera) {
   }
 
   const worldSize = new THREE.Vector3();
-  const inverseRingWorldRotation = new THREE.Quaternion();
-  // Keep both labels readable even when the torus animates or the user drags
-  // the camera. Positions stay locked to the GLB, but text cannot flip over.
-  function orientTapLabelsToCamera() {
-    if (!tapLabels.length) return;
-    ring.getWorldQuaternion(inverseRingWorldRotation).invert();
-    for (const item of tapLabels) {
-      item.group.quaternion.copy(inverseRingWorldRotation)
-        .multiply(camera.quaternion);
-    }
-  }
-  orientTapLabelsToCamera();
   return {
     // Each visible star has independent hover feedback.
     setHover(raycaster) {
@@ -1569,7 +1595,6 @@ function createOrbitShopMesh(ring, globe, camera) {
       const radius = globeRadius * Math.max(worldSize.x, worldSize.y, worldSize.z)
         * (1 + (SHELL_HOLO_ENABLED ? SHELL_HOLO_GAP : 0));
       if (tapLabels.length) {
-        orientTapLabelsToCamera();
         tapOcclusionCenter.copy(globe.geometry.boundingSphere.center)
           .applyMatrix4(globe.matrixWorld);
         tapOcclusionCamera.copy(camera.position);
