@@ -75,8 +75,8 @@ const ORBIT_TAP_TEXT_HEIGHT = 0.76;       // Height in 3D units before button sc
 const ORBIT_TAP_TEXT_LIFT = 0.03;         // Keep the labels close to the ring
 const ORBIT_TAP_TEXT_OUTSIDE_GAP = 0.26;  // Small radial outward offset (0 = earlier position)
 const ORBIT_TAP_TEXT_FONT_SIZE = 184;     // Unchanged from the Minimal Fix
-const ORBIT_TAP_TEXT_DESKTOP_SIZE = 1.15;  // Text dimensions +15%, still wrapped onto ring
-const ORBIT_TAP_TEXT_MOBILE_SIZE = 1.40;   // Text dimensions +40%, still wrapped onto ring
+const ORBIT_TAP_TEXT_DESKTOP_SIZE = 1.22;  // Text dimensions +22%, still wrapped onto ring
+const ORBIT_TAP_TEXT_MOBILE_SIZE = 1.55;   // Text dimensions +55%, still wrapped onto ring
 const ORBIT_TAP_TEXT_MOBILE_BREAKPOINT = 768; // Window width in CSS pixels
 const ORBIT_TAP_TEXT_COLOR = '#ffffff';  // Main letter fill
 const ORBIT_TAP_TEXT_OUTLINE = '#7c458f'; // Dark outline for contrast
@@ -1498,19 +1498,32 @@ function createOrbitShopMesh(ring, globe, camera) {
           forward: forward.clone(),
           tangent: tangent.clone(),
         };
-        // The mirrored half of the ring could turn the texture upside down.
-        // Flip the entire local XY frame, preserving a proper front-facing plane.
+        // UPRIGHT AXIS = TORUS PLANE NORMAL, NOT WORLD UP.
+        // A sign following an orbit curve needs its vertical along the ring's
+        // own rotation axis (axisU x axisV), and its horizontal along the
+        // actual ring tangent. Using world Y projected onto a camera-facing
+        // plane was turning the entire word diagonally across the planet.
+        const ringNormal = new THREE.Vector3()
+          .crossVectors(tube.axisU, tube.axisV).normalize();
         const cameraUpLocal = new THREE.Vector3(0, 1, 0)
           .applyQuaternion(camera.quaternion)
           .transformDirection(ringInverse);
-        if (frame.up.dot(cameraUpLocal) < 0) {
-          frame.up.negate();
-          frame.tangent.negate();
-        }
+        if (ringNormal.dot(cameraUpLocal) < 0) ringNormal.negate();
+
+        // Keep the real torus tangent! Changing this to a screen-horizontal
+        // vector makes the text leave the ring instead of bending around it.
+        frame.up.copy(ringNormal)
+          .addScaledVector(frame.tangent, -ringNormal.dot(frame.tangent))
+          .normalize();
+        // Orthogonal right-handed basis with the ring-normal as local Y.
+        frame.forward.crossVectors(frame.tangent, frame.up).normalize();
         const label = new THREE.Group();
         label.name = `OrbitTapHereLabel_${index + 1}`;
+        // Preserve the Minimal Fix's exact mounting location. ringFrame's
+        // original forward is the tube-facing offset. The new frame.forward
+        // above only controls label orientation, not its location.
         label.position.copy(anchor)
-          .addScaledVector(frame.forward, mountDistance)
+          .addScaledVector(forward, mountDistance)
           // OUTSIDE the orbit circumference, not floating away from it.
           .addScaledVector(frame.radial, ORBIT_TAP_TEXT_OUTSIDE_GAP * scale)
           .addScaledVector(frame.up, ORBIT_TAP_TEXT_LIFT * scale);
