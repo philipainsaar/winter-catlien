@@ -64,6 +64,23 @@ const ORBIT_SHOP_BUTTON_STAR_INNER_RATIO = 0.58; // Smaller = deeper star valley
 const ORBIT_SHOP_BUTTON_STAR_ROUNDNESS = 0.30;  // 0 sharp, 0.2 soft, 0.3 very round
 // =====================================================================
 
+
+// ===== TWO MIRRORED TAP HERE LABELS =====================================
+// Text-only 3D lettering halfway between the two star buttons on the Torus.
+// It follows the GLB orbit and is readable from either outside-facing side.
+const ORBIT_TAP_TEXT_ENABLED = true;
+const ORBIT_TAP_TEXT = 'Tap here';
+const ORBIT_TAP_TEXT_WIDTH = 2.75;        // Width in 3D units before button scale
+const ORBIT_TAP_TEXT_HEIGHT = 0.76;       // Height in 3D units before button scale
+const ORBIT_TAP_TEXT_LIFT = 0.03;         // Retained for compatibility (labels now mount radially outside)
+const ORBIT_TAP_TEXT_OUTSIDE_GAP = 0.34;  // Additional distance outside Torus tube, before button scale
+const ORBIT_TAP_TEXT_FONT_SIZE = 184;     // Font pixels in the transparent texture
+const ORBIT_TAP_TEXT_COLOR = '#ffffff';  // Main letter fill
+const ORBIT_TAP_TEXT_OUTLINE = '#7c458f'; // Dark outline for contrast
+const ORBIT_TAP_TEXT_GLOW = '#e9a4ff';   // Soft lilac glow
+const ORBIT_TAP_TEXT_OPACITY = 1.0;
+// =====================================================================
+
 // ===== SPARKLE SETTINGS (EDIT THESE ONLY) ==============================
 // These are REAL multipliers: no silent size/brightness/ray-length caps.
 // SIZE changes the bright white core AND its halo, not just invisible padding.
@@ -1338,7 +1355,202 @@ function createOrbitShopMesh(ring, globe, camera) {
     return null;
   }
 
+
+  // Add two text-only labels in the empty arcs between the two star buttons.
+  // The locations are star angle + 90° and + 270°: opposite sides of the ring.
+  // Both front and rear planes have normal-reading text, not reversed lettering.
+  const tapLabels = [];
+  const tapOcclusionCenter = globeCenter.clone();
+  const tapOcclusionCamera = camera.position.clone();
+  const tapOcclusionRadius = { value: worldRadius };
+
+  if (ORBIT_TAP_TEXT_ENABLED && buttons.length >= 2) {
+    const textCanvas = document.createElement('canvas');
+    textCanvas.width = 1024;
+    textCanvas.height = 320;
+    const context = textCanvas.getContext('2d');
+
+    if (context) {
+      const tw = textCanvas.width;
+      const th = textCanvas.height;
+      context.clearRect(0, 0, tw, th);
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.lineJoin = 'round';
+      context.lineCap = 'round';
+      const textWeight = 900;
+      const tapFont = (size) =>
+        `${textWeight} ${size}px "Inconsolata", ui-monospace, monospace`;
+      context.font = tapFont(ORBIT_TAP_TEXT_FONT_SIZE);
+      const availableWidth = tw * 0.87;
+      const measured = context.measureText(ORBIT_TAP_TEXT).width;
+      if (measured > availableWidth) {
+        context.font = tapFont(Math.floor(
+          ORBIT_TAP_TEXT_FONT_SIZE * availableWidth / measured
+        ));
+      }
+      // Luminous outline behind opaque white lettering.
+      context.save();
+      context.shadowColor = ORBIT_TAP_TEXT_GLOW;
+      context.shadowBlur = 28;
+      context.strokeStyle = ORBIT_TAP_TEXT_GLOW;
+      context.globalAlpha = 0.72;
+      context.lineWidth = 12;
+      context.strokeText(ORBIT_TAP_TEXT, tw / 2, th / 2);
+      context.restore();
+      context.lineWidth = 9;
+      context.strokeStyle = ORBIT_TAP_TEXT_OUTLINE;
+      context.strokeText(ORBIT_TAP_TEXT, tw / 2, th / 2);
+      context.fillStyle = ORBIT_TAP_TEXT_COLOR;
+      context.fillText(ORBIT_TAP_TEXT, tw / 2, th / 2);
+
+      const tapTexture = new THREE.CanvasTexture(textCanvas);
+      tapTexture.colorSpace = THREE.SRGBColorSpace;
+      tapTexture.anisotropy = 4;
+
+      function patchTapOcclusion(material) {
+        material.onBeforeCompile = (shader) => {
+          shader.uniforms.uTapSphereCenter = { value: tapOcclusionCenter };
+          shader.uniforms.uTapCamera = { value: tapOcclusionCamera };
+          shader.uniforms.uTapSphereRadius = tapOcclusionRadius;
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <common>',
+            '#include <common>\nvarying vec3 vTapWorldPosition;'
+          );
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <project_vertex>',
+            '#include <project_vertex>\nvTapWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <common>',
+            `#include <common>
+             varying vec3 vTapWorldPosition;
+             uniform vec3 uTapSphereCenter;
+             uniform vec3 uTapCamera;
+             uniform float uTapSphereRadius;`
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <clipping_planes_fragment>',
+            `#include <clipping_planes_fragment>
+             vec3 tapRay = vTapWorldPosition - uTapCamera;
+             float tapDistance = length(tapRay);
+             vec3 tapDir = tapRay / max(tapDistance, 0.00001);
+             vec3 tapToSphere = uTapSphereCenter - uTapCamera;
+             float tapAlong = dot(tapToSphere, tapDir);
+             float tapDisc = tapAlong * tapAlong
+               - dot(tapToSphere, tapToSphere)
+               + uTapSphereRadius * uTapSphereRadius;
+             if (tapDisc > 0.0) {
+               float tapNear = tapAlong - sqrt(tapDisc);
+               if (tapNear > 0.0 && tapDistance > tapNear + 0.015)
+                 discard;
+             }`
+          );
+        };
+        material.customProgramCacheKey = () => 'tap-label-sphere-clip-v1';
+        material.needsUpdate = true;
+        return material;
+      }
+
+      // Mount each label OUTSIDE the circle, not on its camera-facing tube wall.
+      // Their positions remain genuine children of the animated Torus.
+      // Only their orientation is billboarded to the camera so both labels
+      // read left-to-right and right-side-up throughout orbital animation.
+      function buildTapLabel(theta, index) {
+        const orbitRadial = tube.axisU.clone()
+          .multiplyScalar(Math.cos(theta))
+          .addScaledVector(tube.axisV, Math.sin(theta))
+          .normalize();
+        const centerline = tube.center.clone()
+          .addScaledVector(orbitRadial, tube.radius);
+
+        // A flat text panel forms a chord of the torus. Account for that chord
+        // so even the ends of a large label stay OUTSIDE the ring silhouette.
+        const halfWidth = ORBIT_TAP_TEXT_WIDTH * scale * 0.5;
+        const safeHalfWidth = Math.min(halfWidth, tube.radius * 0.8);
+        const arcClearance = tube.radius - Math.sqrt(
+          Math.max(0, tube.radius * tube.radius - safeHalfWidth * safeHalfWidth)
+        );
+        const outsideOffset = tube.tubeRadius + arcClearance
+          + ORBIT_TAP_TEXT_OUTSIDE_GAP * scale;
+
+        const label = new THREE.Group();
+        label.name = `OrbitTapHereLabel_${index + 1}`;
+        label.position.copy(centerline)
+          .addScaledVector(orbitRadial, outsideOffset);
+        label.scale.setScalar(scale);
+        orbitRoot.add(label);
+
+        const mat = patchTapOcclusion(new THREE.MeshBasicMaterial({
+          name: `Outside Tap Here lettering ${index + 1}`,
+          map: tapTexture,
+          transparent: true,
+          alphaTest: 0.004,
+          opacity: ORBIT_TAP_TEXT_OPACITY,
+          depthTest: true,
+          depthWrite: false,
+          toneMapped: false,
+          // No back-facing duplicate. Both labels are oriented toward the viewer.
+          side: THREE.FrontSide,
+        }));
+
+        const geometry = new THREE.PlaneGeometry(
+          ORBIT_TAP_TEXT_WIDTH, ORBIT_TAP_TEXT_HEIGHT, 24, 2
+        );
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.name = `OrbitTapHereOutside_${index + 1}`;
+        mesh.renderOrder = 23;
+        mesh.frustumCulled = false;
+
+        // Match the shader's sphere occlusion when testing clicks.
+        // The plane is not allowed to create an invisible backside hit target.
+        const originalRaycast = mesh.raycast.bind(mesh);
+        mesh.raycast = (raycaster, hits) => {
+          const candidates = [];
+          originalRaycast(raycaster, candidates);
+          for (const hit of candidates) {
+            const ray = hit.point.clone().sub(raycaster.ray.origin);
+            const distance = ray.length();
+            ray.divideScalar(Math.max(distance, 0.00001));
+            const toSphere = tapOcclusionCenter.clone()
+              .sub(raycaster.ray.origin);
+            const along = toSphere.dot(ray);
+            const disc = along * along - toSphere.lengthSq()
+              + tapOcclusionRadius.value ** 2;
+            if (disc > 0) {
+              const near = along - Math.sqrt(disc);
+              if (near > 0 && distance > near + 0.015) continue;
+            }
+            hits.push(hit);
+          }
+        };
+        label.add(mesh);
+        return { group: label, material: mat };
+      }
+
+      // Exact halfway points between stars. Both move with the same GLB torus.
+      const start = bestAngle + ORBIT_SHOP_BUTTON_MIRROR_OFFSET * 0.5;
+      for (let i = 0; i < 2; i += 1) {
+        tapLabels.push(buildTapLabel(
+          start + i * ORBIT_SHOP_BUTTON_MIRROR_OFFSET, i
+        ));
+      }
+    }
+  }
+
   const worldSize = new THREE.Vector3();
+  const inverseRingWorldRotation = new THREE.Quaternion();
+  // Keep both labels readable even when the torus animates or the user drags
+  // the camera. Positions stay locked to the GLB, but text cannot flip over.
+  function orientTapLabelsToCamera() {
+    if (!tapLabels.length) return;
+    ring.getWorldQuaternion(inverseRingWorldRotation).invert();
+    for (const item of tapLabels) {
+      item.group.quaternion.copy(inverseRingWorldRotation)
+        .multiply(camera.quaternion);
+    }
+  }
+  orientTapLabelsToCamera();
   return {
     // Each visible star has independent hover feedback.
     setHover(raycaster) {
@@ -1356,6 +1568,13 @@ function createOrbitShopMesh(ring, globe, camera) {
       globe.getWorldScale(worldSize);
       const radius = globeRadius * Math.max(worldSize.x, worldSize.y, worldSize.z)
         * (1 + (SHELL_HOLO_ENABLED ? SHELL_HOLO_GAP : 0));
+      if (tapLabels.length) {
+        orientTapLabelsToCamera();
+        tapOcclusionCenter.copy(globe.geometry.boundingSphere.center)
+          .applyMatrix4(globe.matrixWorld);
+        tapOcclusionCamera.copy(camera.position);
+        tapOcclusionRadius.value = radius;
+      }
       const phase = animate ? seconds : 0;
       const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2 *
         Math.max(0, ORBIT_SHOP_BUTTON_GLOW_PULSE_SPEED));
@@ -1382,7 +1601,11 @@ function createOrbitShopMesh(ring, globe, camera) {
         item.sweepMaterial.uniforms.uOcclusionCamera.value.copy(item.occlusionCamera);
         item.sweepMaterial.uniforms.uOcclusionRadius.value = item.occlusionRadius.value;
       }
-      // Each 3D star inherits the torus animation without any extra movement.
+      for (const item of tapLabels) {
+        item.material.opacity = ORBIT_TAP_TEXT_OPACITY *
+          (0.92 + 0.08 * pulse);
+      }
+      // Each star and label inherits the torus animation without extra movement.
     },
   };
 }
