@@ -25,7 +25,9 @@ const GAME_GLOBE_COMPACT_SIZE = 48;
 // Each star follows the ring and disappears when hidden behind the planet.
 // Colors, glow, transparency and animated reflections are independently preserved.
 const ORBIT_SHOP_BUTTON_ENABLED = true;
-const ORBIT_SHOP_BUTTON_TEXT = '🛒'; // Unicode shopping bag; no PNG or SVG needed
+// const ORBIT_SHOP_BUTTON_TEXT = '🛒'; // Unicode shopping bag; no PNG or SVG needed
+const ORBIT_SHOP_BUTTON_IMAGE = '/images/shoppingbag.png';
+const ORBIT_SHOP_BUTTON_ICON_SIZE = 0.55;
 const ORBIT_SHOP_BUTTON_SIZE = 1.4;           // 0.7 compact; 1 normal; 1.4 large
 const ORBIT_SHOP_BUTTON_POSITION = -0.48;     // Where on the visible ring to start (screen Y)
 const ORBIT_SHOP_BUTTON_WIDTH = 1.46;         // Rounded-star width in 3D world units
@@ -1077,58 +1079,9 @@ function createOrbitShopMesh(ring, globe, camera) {
 
     // A custom text canvas becomes a material map on a true 3D front plane.
     // The texture has NO solid background; the bevelled body provides it.
-    const canvas = document.createElement('canvas');
-    canvas.width = 896;
-    canvas.height = 320;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { orbitRoot.remove(orbitGroup); return null; }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    // Always honor the top-of-file font weight, even after fitting long text.
-    const fontWeight = Math.max(100, Math.min(900, ORBIT_SHOP_TEXT_WEIGHT));
-    const textFont = (px) => `${fontWeight} ${px}px "Inconsolata", ui-monospace, monospace`;
-    ctx.font = textFont(260);
-    // Fit text inside the curved 3D face without changing button geometry.
-    const maxTextWidth = canvas.width * 0.87;
-    const measuredWidth = ctx.measureText(ORBIT_SHOP_BUTTON_TEXT).width;
-    if (measuredWidth > maxTextWidth) {
-      ctx.font = textFont(Math.max(52, Math.floor(116 * maxTextWidth / measuredWidth)));
-    }
-    const textX = canvas.width / 2;
-    const textY = canvas.height / 2;
-    const outlineWidth = Math.max(0, ORBIT_SHOP_TEXT_OUTLINE_WIDTH);
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-
-    // Draw the luminous halo on the transparent lettering texture itself.
-    // A separate material keeps the text legible when the body/edge are glassy.
-    if (ORBIT_SHOP_TEXT_GLOW_ENABLED && ORBIT_SHOP_TEXT_GLOW_BLUR > 0) {
-      ctx.save();
-      ctx.shadowColor = ORBIT_SHOP_TEXT_GLOW_COLOR;
-      ctx.shadowBlur = Math.max(0, ORBIT_SHOP_TEXT_GLOW_BLUR);
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.strokeStyle = ORBIT_SHOP_TEXT_GLOW_COLOR;
-      ctx.lineWidth = outlineWidth + 3;
-      ctx.globalAlpha = 0.65;
-      // A second pass strengthens the soft light, rather than enlarging the text.
-      for (let pass = 0; pass < 2; pass += 1) {
-        ctx.strokeText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
-      }
-      ctx.restore();
-    }
-
-    // Dark purple outline + white core: crisp, thicker, and easily readable.
-    // The text colors are independent of the 3D glass face and its opacity.
-    if (outlineWidth > 0) {
-      ctx.lineWidth = outlineWidth;
-      ctx.strokeStyle = ORBIT_SHOP_TEXT_COLOR;
-      ctx.strokeText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
-    }
-    ctx.fillStyle = ORBIT_SHOP_BUTTON_TEXT_COLOR;
-    ctx.fillText(ORBIT_SHOP_BUTTON_TEXT, textX, textY);
-    const textMap = new THREE.CanvasTexture(canvas);
+    const textMap = new THREE.TextureLoader().load(
+    ORBIT_SHOP_BUTTON_IMAGE
+    );
     textMap.colorSpace = THREE.SRGBColorSpace;
     textMap.anisotropy = 4;
     const textMaterial = new THREE.MeshBasicMaterial({
@@ -1144,7 +1097,11 @@ function createOrbitShopMesh(ring, globe, camera) {
       side: THREE.FrontSide,
     });
     const textMesh = new THREE.Mesh(
-      wrapToOrbit(new THREE.PlaneGeometry(w * 0.78, h * 0.27, 36, 2)
+      wrapToOrbit(new THREE.PlaneGeometry(
+        w * ORBIT_SHOP_BUTTON_ICON_SIZE,
+        w * ORBIT_SHOP_BUTTON_ICON_SIZE * (543 / 512),
+        36, 2
+      )
         .translate(0, 0, faceZ + 0.013)),
       textMaterial,
     );
@@ -1159,7 +1116,9 @@ function createOrbitShopMesh(ring, globe, camera) {
     // the plane by 180 degrees (so it reads normally from outside), and put
     // it just beyond the rear bevel. Only the camera-facing text is rendered.
     const outsideTextGeometry = new THREE.PlaneGeometry(
-      w * 0.78, h * 0.27, 36, 2,
+      w * ORBIT_SHOP_BUTTON_ICON_SIZE,
+      w * ORBIT_SHOP_BUTTON_ICON_SIZE * (543 / 512),
+      36, 2
     );
     outsideTextGeometry.rotateY(Math.PI);
     outsideTextGeometry.translate(0, 0, -faceZ - 0.013);
@@ -1381,9 +1340,9 @@ function createOrbitShopMesh(ring, globe, camera) {
       context.textBaseline = 'middle';
       context.lineJoin = 'round';
       context.lineCap = 'round';
-      const textWeight = 900;
+      const textWeight = 700;
       const tapFont = (size) =>
-        `${textWeight} ${size}px "Inconsolata", ui-monospace, monospace`;
+  `${textWeight} ${size}px "Unkempt", cursive`;
       context.font = tapFont(ORBIT_TAP_TEXT_FONT_SIZE);
       const availableWidth = tw * 0.87;
       const measured = context.measureText(ORBIT_TAP_TEXT).width;
